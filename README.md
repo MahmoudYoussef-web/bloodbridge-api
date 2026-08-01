@@ -393,6 +393,11 @@ Enforced across three layers — Spring Security, interceptors, and service-leve
 - **Rate limiting** on QR scans and public contact submissions
 - **Optimistic + pessimistic locking** to prevent race conditions on concurrent donation acceptance
 
+<!-- Real Swagger UI try-it-out execution of POST /v1/auth/login (200 with token pair) -->
+<p align="center">
+  <img src="docs/screenshots/login-flow.png" width="800" alt="Swagger UI - login and refresh token flow"/>
+</p>
+
 <details>
 <summary><b>📸 Sample: login → refresh token rotation</b></summary>
 
@@ -412,11 +417,6 @@ Enforced across three layers — Spring Security, interceptors, and service-leve
   "expiresIn": 86400000
 }
 ```
-
-<!-- Real Swagger UI try-it-out execution of POST /v1/auth/login (200 with token pair) -->
-<p align="center">
-  <img src="docs/screenshots/login-flow.png" width="800" alt="Swagger UI - login and refresh token flow"/>
-</p>
 
 </details>
 
