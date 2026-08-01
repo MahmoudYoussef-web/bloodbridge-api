@@ -425,6 +425,9 @@ Enforced across three layers — Spring Security, interceptors, and service-leve
 | Limitation | Detail |
 |---|---|
 | Production email verification | The verification gate is enforced, but no production mail-sending flow exists yet — no mail integration, no public verification endpoint. A dev-only `POST /v1/public/verify-dev` endpoint exists strictly under the `h2` profile (`@Profile("h2")` + runtime profile guard, unreachable in production) for local testing. A real token-based email verification flow is required before production rollout. |
+| Password reset | The frontend has Forgot/Reset password pages, but no corresponding backend endpoint exists yet; these pages will fail if used. |
+| Change password | The donor and organization panels have Change Password pages, but no corresponding backend endpoint exists yet; these pages will fail if used. |
+| Email verification page | The frontend's `/verify-email` page has no backend endpoint; verification is only possible via the dev-only h2 probe. |
 | Organization approval bypass | The full approval workflow (PENDING/APPROVED/REJECTED, admin approve/reject endpoints, enforcement interceptor) is implemented, but `register()` currently hardcodes new organizations as `APPROVED` — an intentional demo simplification so organizations are usable immediately. Re-enabling real approvals is a separate design decision. |
 | ML scoring service | Disabled by default (`ml-enabled: false`); the FastAPI companion service lives outside this repository. The platform runs fully on the rule-based fallback scorer without it. |
 | Rate limiting scope | In-memory, single-instance — not distributed across multiple app instances. |
