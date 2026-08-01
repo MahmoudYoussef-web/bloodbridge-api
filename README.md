@@ -494,14 +494,14 @@ docker compose up -d mysql redis prometheus grafana app
 <table>
   <tr>
     <td align="center" width="300">
-      <b>[Your Name]</b><br/>
-      <sub>[Your Role]</sub><br/><br/>
-      <a href="https://github.com/your-username">
-        <img src="https://img.shields.io/badge/GitHub-your--username-181717?style=flat-square&logo=github"/>
+      <b>Mahmoud Youssef</b><br/>
+      <sub>Backend Engineer</sub><br/><br/>
+      <a href="https://github.com/MahmoudYoussef-web">
+        <img src="https://img.shields.io/badge/GitHub-MahmoudYoussef--web-181717?style=flat-square&logo=github"/>
       </a>
       <br/>
-      <a href="https://www.linkedin.com/in/your-username">
-        <img src="https://img.shields.io/badge/LinkedIn-your--username-0A66C2?style=flat-square&logo=linkedin&logoColor=white"/>
+      <a href="https://www.linkedin.com/in/mahmoud-youssef-ba30723bb">
+        <img src="https://img.shields.io/badge/LinkedIn-mahmoud--youssef-0A66C2?style=flat-square&logo=linkedin&logoColor=white"/>
       </a>
     </td>
   </tr>
