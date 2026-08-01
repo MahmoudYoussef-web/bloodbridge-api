@@ -496,9 +496,3 @@ docker compose up -d mysql redis prometheus grafana app
 <div align="center">
   <sub>Built phase by phase — Core Domain → Broadcast & Matching → QR Admission → Donor Scoring → Gamification → Security Hardening.</sub>
 </div>
-
----
-
-## 📚 Documentation
-
-- [`bloodbridge-documentation.md`](bloodbridge-documentation.md) — التوثيق الكامل بالعربية: جداول قاعدة البيانات، تفاصيل الـ API، منطق الخدمات، والمهام المجدولة (full Arabic technical deep-dive)
