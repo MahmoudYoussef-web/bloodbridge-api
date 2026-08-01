@@ -1,0 +1,39 @@
+spring:
+  cache:
+    type: simple
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
+      - org.springframework.boot.autoconfigure.mail.MailSenderValidatorAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:bloodbridge_test;DB_CLOSE_DELAY=-1;MODE=MYSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    defer-datasource-initialization: true
+  sql:
+    init:
+      mode: always
+      continue-on-error: true
+  flyway:
+    enabled: false
+
+bloodbridge:
+  redis:
+    enabled: false
+  fastapi:
+    url: http://localhost:1
+    connect-timeout: 100
+    read-timeout: 100
+  scoring:
+    ml-enabled: false
+
+logging:
+  level:
+    com.bloodbridge: DEBUG

@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: bloodbridge-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: bloodbridge
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
+      MYSQL_USER: bloodbridge
+      MYSQL_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bloodbridge-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: bloodbridge-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bloodbridge-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: bloodbridge-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - bloodbridge-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: bloodbridge-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - bloodbridge-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bloodbridge-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: bloodbridge
+      DB_USERNAME: bloodbridge
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-YXNkZmdoamtsO3BnYmlucHZ6eGNtdmJnZnJkYXNkZmdoamtscXdlcnR5dWlvcGFzZGZnaGprbHhjemJ2}
+      FASTAPI_URL: http://ai-service:8001
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+    ports:
+      - "8080:8080"
+    volumes:
+      - app_logs:/app/logs
+    networks:
+      - bloodbridge-network
+
+  ai-service:
+    build:
+      context: ../bloodbridge-main/ai_service
+      dockerfile: Dockerfile
+    container_name: bloodbridge-ai
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: bloodbridge
+      DB_USERNAME: bloodbridge
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ai_models:/app/models
+      - ../bloodbridge-main/ai_service:/app
+    networks:
+      - bloodbridge-network
+
+volumes:
+  mysql_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  app_logs:
+  ai_models:
+
+networks:
+  bloodbridge-network:
+    driver: bridge

@@ -1,0 +1,15 @@
+target/
+*.jar
+*.war
+*.class
+.git/
+.svn/
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+node_modules/
+logs/
+.DS_Store
+Thumbs.db
