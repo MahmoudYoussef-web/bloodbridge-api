@@ -1,5 +1,6 @@
 package com.bloodbridge.bloodbridge.controller;
 
+import com.bloodbridge.bloodbridge.dto.BloodRequestCreateRequest;
 import com.bloodbridge.bloodbridge.dto.BloodRequestListView;
 import com.bloodbridge.bloodbridge.dto.OrganizationProfileResponse;
 import com.bloodbridge.bloodbridge.dto.OrganizationProfileUpdateRequest;
@@ -24,6 +25,9 @@ import com.bloodbridge.bloodbridge.service.RequestResponseViewAssembler;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -63,12 +67,22 @@ public class OrganizationController {
     @PostMapping("/blood-requests")
     public ResponseEntity<BloodRequest> createRequest(
             @AuthenticationPrincipal User user,
-            @Valid @RequestBody BloodRequest request) {
+            @Valid @RequestBody BloodRequestCreateRequest dto) {
         Organization org = organizationRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
-        request.setOrganization(org);
-        request.setOrganizationId(org.getId());
-        request.setStatus(BloodRequestStatus.PENDING);
+        BloodRequest request = BloodRequest.builder()
+                .organizationId(org.getId())
+                .organization(org)
+                .bloodType(dto.getBloodType())
+                .unitsNeeded(dto.getUnitsNeeded())
+                .urgencyLevel(dto.getUrgencyLevel() != null ? dto.getUrgencyLevel() : com.bloodbridge.bloodbridge.enumtype.UrgencyLevel.NORMAL)
+                .additionalNotes(dto.getAdditionalNotes())
+                .searchRadiusKm(dto.getSearchRadiusKm() != null ? dto.getSearchRadiusKm() : 10)
+                .lat(dto.getLat())
+                .lng(dto.getLng())
+                .locationAddress(dto.getLocationAddress())
+                .status(BloodRequestStatus.PENDING)
+                .build();
 
         BloodRequest saved = bloodRequestRepository.save(request);
 
@@ -85,9 +99,18 @@ public class OrganizationController {
     }
 
     @GetMapping("/blood-requests")
-    public ResponseEntity<List<BloodRequestListView>> getMyRequests(@AuthenticationPrincipal User user) {
+    public ResponseEntity<?> getMyRequests(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) BloodRequestStatus status,
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) Boolean paged) {
         Organization org = organizationRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
+        if (Boolean.TRUE.equals(paged) || status != null || pageable.getPageNumber() > 0) {
+            Page<BloodRequest> page = bloodRequestRepository.findOrgRequestsFiltered(org.getId(), status, pageable);
+            List<BloodRequestListView> views = bloodRequestListViewAssembler.assemble(page.getContent());
+            return ResponseEntity.ok(new org.springframework.data.domain.PageImpl<>(views, pageable, page.getTotalElements()));
+        }
         List<BloodRequest> requests =
                 bloodRequestRepository.findByOrganizationIdOrderByCreatedAtDesc(org.getId());
         return ResponseEntity.ok(bloodRequestListViewAssembler.assemble(requests));

@@ -18,6 +18,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmailAndDeletedAtIsNull(String email);
     
     boolean existsByEmail(String email);
+
+    Optional<User> findByVerificationToken(String verificationToken);
     
     @Query("SELECT u FROM User u WHERE u.role = :role AND u.isActive = true AND u.deletedAt IS NULL")
     List<User> findByRoleAndActive(@Param("role") UserRole role);

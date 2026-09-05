@@ -82,6 +82,10 @@ public class ProfileService {
             userRepository.save(user);
         }
 
+        if (request.getNationalId() != null) donor.setNationalId(request.getNationalId());
+        if (request.getGender() != null) donor.setGender(request.getGender());
+        if (request.getBirthDate() != null) donor.setBirthDate(request.getBirthDate());
+
         DonorHealthProfile hp = donor.getHealthProfile();
         if (hp == null) {
             hp = new DonorHealthProfile();
@@ -96,6 +100,12 @@ public class ProfileService {
         if (request.getInfection() != null) hp.setInfection(request.getInfection());
         if (request.getHasRecentSurgery() != null) hp.setHasRecentSurgery(request.getHasRecentSurgery());
         if (request.getSurgeryDate() != null) hp.setSurgeryDate(request.getSurgeryDate());
+
+        if (request.getLat() != null) donor.setLat(request.getLat());
+        if (request.getLng() != null) donor.setLng(request.getLng());
+        if (request.getGovernorateId() != null) donor.setGovernorateId(request.getGovernorateId());
+        if (request.getAutoLocationAddress() != null) donor.setAutoLocationAddress(request.getAutoLocationAddress());
+        donorRepository.save(donor);
 
         healthProfileRepository.save(hp);
 
@@ -158,6 +168,7 @@ public class ProfileService {
         if (request.getAutoLocationAddress() != null) org.setAutoLocationAddress(request.getAutoLocationAddress());
         if (request.getLat() != null) org.setLat(request.getLat());
         if (request.getLng() != null) org.setLng(request.getLng());
+        if (request.getGovernorateId() != null) org.setGovernorateId(request.getGovernorateId());
         if (request.getOpeningTime() != null) org.setOpeningTime(LocalTime.parse(request.getOpeningTime()));
         if (request.getClosingTime() != null) org.setClosingTime(LocalTime.parse(request.getClosingTime()));
         if (request.getWorkingDays() != null) {
@@ -190,8 +201,8 @@ public class ProfileService {
                     .stream()
                     .collect(Collectors.toMap(RequestResponseAggregate::getBloodRequestId, a -> a));
 
-        Map<Long, RequestResponseStatus> myStatusByRequestId = requestIds.stream()
-                .collect(Collectors.toMap(id -> id, id -> null));
+        Map<Long, RequestResponseStatus> myStatusByRequestId = new HashMap<>();
+        requestIds.forEach(id -> myStatusByRequestId.put(id, null));
 
         requestResponseRepository.findByDonorIdOrderByRespondedAtDesc(donor.getId()).stream()
                 .filter(r -> requestIds.contains(r.getBloodRequestId()))

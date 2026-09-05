@@ -17,6 +17,10 @@ import com.bloodbridge.bloodbridge.service.ProfileService;
 import com.bloodbridge.bloodbridge.service.RequestResponseViewAssembler;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -39,8 +43,36 @@ public class DonorController {
     private final RequestResponseViewAssembler responseViewAssembler;
 
     @GetMapping("/blood-requests")
-    public ResponseEntity<List<BloodRequestCardResponse>> getActiveRequests(@AuthenticationPrincipal User user) {
-        return ResponseEntity.ok(profileService.getDonorActiveRequests(user.getId(), null, null));
+    public ResponseEntity<?> getActiveRequests(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) String bloodType,
+            @RequestParam(required = false) String urgency,
+            @RequestParam(required = false) String q,
+            @PageableDefault(size = 20) Pageable pageable,
+            @RequestParam(required = false) Boolean paged) {
+        List<BloodRequestCardResponse> all = profileService.getDonorActiveRequests(user.getId(), null, null);
+
+        boolean filtering = bloodType != null || urgency != null || q != null
+                || Boolean.TRUE.equals(paged) || pageable.getPageNumber() > 0;
+        if (!filtering) {
+            return ResponseEntity.ok(all);
+        }
+
+        List<BloodRequestCardResponse> filtered = all.stream()
+                .filter(r -> bloodType == null || bloodType.equalsIgnoreCase(String.valueOf(r.bloodType())))
+                .filter(r -> urgency == null || urgency.equalsIgnoreCase(String.valueOf(r.urgencyLevel())))
+                .filter(r -> {
+                    if (q == null || q.isBlank()) return true;
+                    String needle = q.toLowerCase();
+                    return (r.organizationName() != null && r.organizationName().toLowerCase().contains(needle))
+                            || (r.locationAddress() != null && r.locationAddress().toLowerCase().contains(needle));
+                })
+                .toList();
+
+        int start = (int) Math.min(pageable.getOffset(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        Page<BloodRequestCardResponse> page = new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
+        return ResponseEntity.ok(page);
     }
 
     @GetMapping("/blood-requests/{id}")

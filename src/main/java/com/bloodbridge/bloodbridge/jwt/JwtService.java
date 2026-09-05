@@ -75,6 +75,19 @@ public class JwtService {
         }
     }
 
+    public long getRemainingSeconds(String token) {
+        try {
+            long millis = extractExpiration(token).getTime() - System.currentTimeMillis();
+            return Math.max(0, millis / 1000);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    public Date getExpirationDate(String token) {
+        return extractExpiration(token);
+    }
+
     private boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }

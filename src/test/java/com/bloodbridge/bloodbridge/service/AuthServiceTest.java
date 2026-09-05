@@ -2,23 +2,34 @@ package com.bloodbridge.bloodbridge.service;
 
 import com.bloodbridge.bloodbridge.dto.AuthRequest;
 import com.bloodbridge.bloodbridge.dto.AuthResponse;
+import com.bloodbridge.bloodbridge.dto.ChangePasswordRequest;
+import com.bloodbridge.bloodbridge.dto.ForgotPasswordRequest;
+import com.bloodbridge.bloodbridge.dto.ForgotPasswordResponse;
 import com.bloodbridge.bloodbridge.dto.RegisterRequest;
+import com.bloodbridge.bloodbridge.dto.ResetPasswordRequest;
+import com.bloodbridge.bloodbridge.dto.VerifyEmailRequest;
+import com.bloodbridge.bloodbridge.entity.PasswordResetToken;
 import com.bloodbridge.bloodbridge.entity.User;
 import com.bloodbridge.bloodbridge.enumtype.UserRole;
 import com.bloodbridge.bloodbridge.exception.BusinessException;
 import com.bloodbridge.bloodbridge.jwt.JwtService;
 import com.bloodbridge.bloodbridge.repository.DonorRepository;
 import com.bloodbridge.bloodbridge.repository.OrganizationRepository;
+import com.bloodbridge.bloodbridge.repository.PasswordResetTokenRepository;
 import com.bloodbridge.bloodbridge.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,12 +46,17 @@ class AuthServiceTest {
     @Mock private AuthenticationManager authenticationManager;
     @Mock private DonorRepository donorRepository;
     @Mock private OrganizationRepository organizationRepository;
+    @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
+    @Mock private Environment environment;
+    @Mock private ObjectProvider<com.bloodbridge.bloodbridge.shared.domain.RedisRateLimiter> redisRateLimiterProvider;
 
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userRepository, passwordEncoder, jwtService, authenticationManager, donorRepository, organizationRepository);
+        authService = new AuthService(userRepository, passwordEncoder, jwtService, authenticationManager,
+                donorRepository, organizationRepository, passwordResetTokenRepository, environment,
+                redisRateLimiterProvider);
     }
 
     @Test
@@ -176,5 +192,138 @@ class AuthServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getToken()).isEqualTo("new-token");
         assertThat(response.getRefreshToken()).isEqualTo("new-refresh");
+    }
+
+    @Test
+    void shouldCreateResetTokenForExistingUser() {
+        when(userRepository.findByEmailAndDeletedAtIsNull("user@test.com"))
+                .thenReturn(Optional.of(User.builder().email("user@test.com").build()));
+        when(environment.acceptsProfiles(Profiles.of("h2"))).thenReturn(false);
+
+        ForgotPasswordResponse response = authService.forgotPassword(
+                ForgotPasswordRequest.builder().email("user@test.com").build());
+
+        assertThat(response.message()).contains("reset link");
+        assertThat(response.devResetToken()).isNull();
+        verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+    }
+
+    @Test
+    void shouldReturnGenericResponseForUnknownEmail() {
+        when(userRepository.findByEmailAndDeletedAtIsNull("ghost@test.com")).thenReturn(Optional.empty());
+
+        ForgotPasswordResponse response = authService.forgotPassword(
+                ForgotPasswordRequest.builder().email("ghost@test.com").build());
+
+        assertThat(response.message()).contains("reset link");
+        assertThat(response.devResetToken()).isNull();
+        verify(passwordResetTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldResetPasswordWithValidToken() {
+        User user = User.builder().email("user@test.com").password("old-encoded").build();
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .email("user@test.com")
+                .token("reset-token-123")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(passwordResetTokenRepository.findByToken("reset-token-123")).thenReturn(Optional.of(resetToken));
+        when(userRepository.findByEmailAndDeletedAtIsNull("user@test.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("newPassword1")).thenReturn("new-encoded");
+
+        var response = authService.resetPassword(ResetPasswordRequest.builder()
+                .token("reset-token-123")
+                .password("newPassword1")
+                .passwordConfirmation("newPassword1")
+                .build());
+
+        assertThat(response.message()).contains("reset");
+        assertThat(user.getPassword()).isEqualTo("new-encoded");
+        verify(passwordResetTokenRepository).deleteById("user@test.com");
+    }
+
+    @Test
+    void shouldRejectExpiredResetToken() {
+        PasswordResetToken resetToken = PasswordResetToken.builder()
+                .email("user@test.com")
+                .token("old-token")
+                .createdAt(LocalDateTime.now().minusHours(2))
+                .build();
+
+        when(passwordResetTokenRepository.findByToken("old-token")).thenReturn(Optional.of(resetToken));
+
+        assertThatThrownBy(() -> authService.resetPassword(ResetPasswordRequest.builder()
+                .token("old-token")
+                .password("newPassword1")
+                .passwordConfirmation("newPassword1")
+                .build()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid or expired reset token");
+        verify(passwordResetTokenRepository).deleteById("user@test.com");
+    }
+
+    @Test
+    void shouldChangePasswordWithCorrectCurrentPassword() {
+        User user = User.builder().email("user@test.com").password("current-encoded").build();
+        when(passwordEncoder.matches("currentPassword1", "current-encoded")).thenReturn(true);
+        when(passwordEncoder.encode("newPassword1")).thenReturn("new-encoded");
+
+        var response = authService.changePassword(user, ChangePasswordRequest.builder()
+                .currentPassword("currentPassword1")
+                .newPassword("newPassword1")
+                .newPasswordConfirmation("newPassword1")
+                .build());
+
+        assertThat(response.message()).contains("changed");
+        assertThat(user.getPassword()).isEqualTo("new-encoded");
+    }
+
+    @Test
+    void shouldRejectChangePasswordWithWrongCurrent() {
+        User user = User.builder().email("user@test.com").password("current-encoded").build();
+        when(passwordEncoder.matches("wrong-password", "current-encoded")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.changePassword(user, ChangePasswordRequest.builder()
+                .currentPassword("wrong-password")
+                .newPassword("newPassword1")
+                .newPasswordConfirmation("newPassword1")
+                .build()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Current password is incorrect");
+    }
+
+    @Test
+    void shouldVerifyEmailWithValidToken() {
+        User user = User.builder()
+                .email("user@test.com")
+                .verificationToken("verify-token-123")
+                .verificationTokenExpiresAt(LocalDateTime.now().plusHours(1))
+                .build();
+
+        when(userRepository.findByVerificationToken("verify-token-123")).thenReturn(Optional.of(user));
+
+        var response = authService.verifyEmail(VerifyEmailRequest.builder().token("verify-token-123").build());
+
+        assertThat(response.message()).contains("verified");
+        assertThat(user.getEmailVerifiedAt()).isNotNull();
+        assertThat(user.getVerificationToken()).isNull();
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void shouldRejectExpiredVerificationToken() {
+        User user = User.builder()
+                .email("user@test.com")
+                .verificationToken("stale-token")
+                .verificationTokenExpiresAt(LocalDateTime.now().minusHours(1))
+                .build();
+
+        when(userRepository.findByVerificationToken("stale-token")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.verifyEmail(VerifyEmailRequest.builder().token("stale-token").build()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid or expired verification token");
     }
 }

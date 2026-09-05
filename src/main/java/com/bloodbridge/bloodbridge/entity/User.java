@@ -55,6 +55,12 @@ public class User implements UserDetails {
     @Column(name = "remember_token", length = 100)
     private String rememberToken;
 
+    @Column(name = "verification_token", length = 255)
+    private String verificationToken;
+
+    @Column(name = "verification_token_expires_at")
+    private LocalDateTime verificationTokenExpiresAt;
+
     @Builder.Default
     @Column(length = 5)
     private String locale = "en";

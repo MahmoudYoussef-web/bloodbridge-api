@@ -33,7 +33,3 @@ bloodbridge:
     read-timeout: 100
   scoring:
     ml-enabled: false
-
-logging:
-  level:
-    com.bloodbridge: DEBUG

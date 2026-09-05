@@ -3,6 +3,8 @@ package com.bloodbridge.bloodbridge.repository;
 import com.bloodbridge.bloodbridge.entity.BloodRequest;
 import com.bloodbridge.bloodbridge.enumtype.BloodRequestStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -18,6 +20,13 @@ import java.util.Optional;
 public interface BloodRequestRepository extends JpaRepository<BloodRequest, Long>, JpaSpecificationExecutor<BloodRequest> {
 
     List<BloodRequest> findByOrganizationIdOrderByCreatedAtDesc(Long organizationId);
+
+    long countByStatus(BloodRequestStatus status);
+
+    Page<BloodRequest> findByOrganizationIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long organizationId, Pageable pageable);
+
+    @Query("SELECT br FROM BloodRequest br WHERE br.organizationId = :orgId AND br.deletedAt IS NULL AND (:status IS NULL OR br.status = :status)")
+    Page<BloodRequest> findOrgRequestsFiltered(@Param("orgId") Long orgId, @Param("status") BloodRequestStatus status, Pageable pageable);
 
     @Query("SELECT br FROM BloodRequest br WHERE br.status IN :statuses AND br.fulfilledAt IS NULL AND br.deletedAt IS NULL")
     List<BloodRequest> findByStatusIn(@Param("statuses") List<BloodRequestStatus> statuses);

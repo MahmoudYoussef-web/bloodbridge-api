@@ -16,10 +16,17 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import java.time.LocalDateTime;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
@@ -94,8 +101,74 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest().body(problem);
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ProblemDetails> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMessage());
+        ProblemDetails problem = ProblemDetails.of(
+                HttpStatus.CONFLICT.value(),
+                "DATA_CONFLICT",
+                "The request conflicts with existing data (duplicate or invalid reference)"
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
+        ProblemDetails problem = ProblemDetails.of(
+                HttpStatus.BAD_REQUEST.value(),
+                "MALFORMED_REQUEST",
+                "Malformed JSON request body"
+        );
+        return ResponseEntity.badRequest().body(problem);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleMissingServletRequestParameter(
+            MissingServletRequestParameterException ex, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
+        ProblemDetails problem = ProblemDetails.of(
+                HttpStatus.BAD_REQUEST.value(),
+                "MISSING_PARAMETER",
+                "Missing required parameter: " + ex.getParameterName()
+        );
+        return ResponseEntity.badRequest().body(problem);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ProblemDetails> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        ProblemDetails problem = ProblemDetails.of(
+                HttpStatus.BAD_REQUEST.value(),
+                "INVALID_PARAMETER",
+                "Invalid value for parameter: " + ex.getName()
+        );
+        return ResponseEntity.badRequest().body(problem);
+    }
+
+    @ExceptionHandler({AccessDeniedException.class})
+    public ResponseEntity<ProblemDetails> handleSpringAccessDenied(AccessDeniedException ex) {
+        ProblemDetails problem = ProblemDetails.of(
+                HttpStatus.FORBIDDEN.value(),
+                "ACCESS_DENIED",
+                "You do not have permission to access this resource"
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ProblemDetails> handleIllegalArgument(IllegalArgumentException ex) {
+        ProblemDetails problem = ProblemDetails.of(
+                HttpStatus.BAD_REQUEST.value(),
+                "BAD_REQUEST",
+                ex.getMessage() != null ? ex.getMessage() : "Invalid request"
+        );
+        return ResponseEntity.badRequest().body(problem);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetails> handleGeneralError(Exception ex) {
+        log.error("Unhandled exception", ex);
         ProblemDetails problem = ProblemDetails.of(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "INTERNAL_ERROR",

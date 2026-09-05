@@ -4,6 +4,7 @@ import com.bloodbridge.bloodbridge.entity.User;
 import com.bloodbridge.bloodbridge.enumtype.UserRole;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -30,8 +31,8 @@ public class EmailVerificationInterceptor implements HandlerInterceptor {
         }
 
         if (!user.isEmailVerified() && !user.isPhoneVerified()) {
-            response.setStatus(403);
-            return false;
+            return InterceptorUtil.deny(response, HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED",
+                    "Please verify your email address to continue. Check your inbox for the verification link.");
         }
 
         return true;

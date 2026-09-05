@@ -16,6 +16,7 @@ public class OrganizationProfileUpdateRequest {
     private String autoLocationAddress;
     private Double lat;
     private Double lng;
+    private Long governorateId;
     private String openingTime;
     private String closingTime;
     private List<Integer> workingDays;

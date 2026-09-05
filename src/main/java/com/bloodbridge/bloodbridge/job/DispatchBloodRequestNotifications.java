@@ -75,13 +75,20 @@ public class DispatchBloodRequestNotifications {
 
         Set<Long> alreadyRespondedIds = new HashSet<>();
         if (!donorIds.isEmpty()) {
-            alreadyRespondedIds.addAll(
-                    requestResponseRepository.findByBloodRequestIdAndDonorIdIn(
-                            bloodRequest.getId(), donorIds
-                    ).stream()
-                    .map(rr -> rr.getDonorId())
-                    .collect(Collectors.toSet())
-            );
+            // A QR-less PENDING row is only a broadcast offer, not a decision:
+            // those donors must still be notified. Only donors with a real
+            // response (claimed QR row or any non-PENDING status) are skipped.
+            Map<Long, RequestResponse> rowByDonor = requestResponseRepository
+                    .findByBloodRequestIdAndDonorIdIn(bloodRequest.getId(), donorIds)
+                    .stream()
+                    .collect(Collectors.toMap(RequestResponse::getDonorId, r -> r, (a, b) -> a));
+            for (Map.Entry<Long, RequestResponse> e : rowByDonor.entrySet()) {
+                RequestResponse row = e.getValue();
+                if (row.getVerificationQrCode() != null
+                        || row.getStatus() != RequestResponseStatus.PENDING) {
+                    alreadyRespondedIds.add(e.getKey());
+                }
+            }
         }
 
         int sentCount = 0;

@@ -51,14 +51,19 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.POST, "/v1/auth/change-password").authenticated()
+                .requestMatchers(HttpMethod.POST, "/v1/auth/logout").authenticated()
+                .requestMatchers(HttpMethod.GET, "/v1/auth/profile").authenticated()
                 .requestMatchers("/v1/auth/**").permitAll()
                 .requestMatchers("/v1/public/**").permitAll()
                 .requestMatchers("/health").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers("/v1/admin/**").hasRole("ADMIN")
                 .requestMatchers("/v1/donor/**").hasRole("DONOR")
                 .requestMatchers("/v1/org/**").hasRole("ORGANIZATION")
+                .requestMatchers("/v1/notifications/**").authenticated()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -113,15 +118,18 @@ public class SecurityConfig {
                 .toList();
 
         if (origins.size() == 1 && "*".equals(origins.get(0))) {
+            // Wildcard + allowCredentials is rejected by browsers per Fetch spec.
+            // Fall back to safe non-credentialed wildcard, or set explicit origins in config.
             configuration.setAllowedOriginPatterns(List.of("*"));
+            configuration.setAllowCredentials(false);
         } else {
             configuration.setAllowedOrigins(origins);
+            configuration.setAllowCredentials(true);
         }
 
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "Accept-Language"));
         configuration.setExposedHeaders(List.of("Authorization"));
-        configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -48,6 +48,22 @@ public interface RequestResponseRepository extends JpaRepository<RequestResponse
     @Query("SELECT COUNT(rr) FROM RequestResponse rr WHERE rr.donorId = :donorId AND rr.status IN :statuses AND rr.deletedAt IS NULL")
     long countByDonorIdAndStatusIn(@Param("donorId") Long donorId, @Param("statuses") List<RequestResponseStatus> statuses);
 
+    /**
+     * Active claims that occupy the donor's single concurrent slot:
+     * claimed (ACCEPTED) responses plus the donor's own pending acceptances
+     * (PENDING rows that already carry a QR token). QR-less PENDING rows are
+     * mere broadcast offers and must not block the donor from responding.
+     */
+    @Query("""
+        SELECT COUNT(rr) FROM RequestResponse rr
+        WHERE rr.donorId = :donorId AND rr.deletedAt IS NULL
+          AND (rr.status = :accepted
+               OR (rr.status = :pending AND rr.verificationQrCode IS NOT NULL))
+        """)
+    long countActiveClaims(@Param("donorId") Long donorId,
+                           @Param("accepted") RequestResponseStatus accepted,
+                           @Param("pending") RequestResponseStatus pending);
+
     @Query("SELECT COUNT(rr) FROM RequestResponse rr WHERE rr.bloodRequestId = :requestId AND rr.status = :status AND rr.deletedAt IS NULL")
     long countByBloodRequestIdAndStatus(@Param("requestId") Long requestId, @Param("status") RequestResponseStatus status);
 

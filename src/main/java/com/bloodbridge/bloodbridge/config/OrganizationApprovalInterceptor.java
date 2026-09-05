@@ -8,6 +8,7 @@ import com.bloodbridge.bloodbridge.repository.OrganizationRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -39,8 +40,15 @@ public class OrganizationApprovalInterceptor implements HandlerInterceptor {
                 .map(org -> {
                     if (org.getApprovalStatus() == OrganizationStatus.PENDING
                             || org.getApprovalStatus() == OrganizationStatus.REJECTED) {
-                        response.setStatus(403);
-                        return false;
+                        String detail = org.getApprovalStatus() == OrganizationStatus.PENDING
+                                ? "Your organization is awaiting admin approval."
+                                : "Your organization application was rejected. Please contact support.";
+                        try {
+                            return InterceptorUtil.deny(response, HttpStatus.FORBIDDEN, "ORG_NOT_APPROVED", detail);
+                        } catch (Exception e) {
+                            response.setStatus(403);
+                            return false;
+                        }
                     }
                     return true;
                 })

@@ -7,6 +7,9 @@ spring:
   application:
     name: bloodbridge
 
+  profiles:
+    default: h2
+
   datasource:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_DATABASE:bloodbridge}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: ${DB_USERNAME:root}
@@ -86,13 +89,6 @@ spring:
     basename: i18n/messages
     encoding: UTF-8
     fallback-to-system-locale: false
-
-logging:
-  level:
-    com.bloodbridge.bloodbridge: DEBUG
-    org.springframework.security: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
 management:
   endpoints:

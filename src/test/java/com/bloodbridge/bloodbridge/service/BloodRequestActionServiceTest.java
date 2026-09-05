@@ -228,4 +228,67 @@ class BloodRequestActionServiceTest extends AbstractIntegrationTest {
         RequestResponse response = actionService.accept(donorUser, request.getId(), 31.51, 34.47);
         assertThat(response.getDistance()).isNotNull().isPositive();
     }
+
+    @Test
+    void shouldClaimBroadcastOfferWithoutDuplicate() {
+        // Simulate a broadcast offer: QR-less PENDING row created by matching.
+        RequestResponse offer = new RequestResponse();
+        offer.setBloodRequestId(request.getId());
+        offer.setDonorId(donor.getId());
+        offer.setStatus(RequestResponseStatus.PENDING);
+        offer = requestResponseRepository.save(offer);
+
+        // A mere offer must not occupy the donor's active slot.
+        assertThat(requestResponseRepository.countActiveClaims(
+                donor.getId(), RequestResponseStatus.ACCEPTED, RequestResponseStatus.PENDING)).isZero();
+
+        RequestResponse claimed = actionService.accept(donorUser, request.getId(), 31.5, 34.47);
+
+        // Same row transitioned (no duplicate), now carrying a QR token.
+        assertThat(claimed.getId()).isEqualTo(offer.getId());
+        assertThat(claimed.getVerificationQrCode()).isNotNull().hasSize(32);
+        assertThat(requestResponseRepository
+                .findByBloodRequestIdAndDonorId(request.getId(), donor.getId())).isPresent();
+        assertThat(requestResponseRepository.findByBloodRequestId(request.getId())).hasSize(1);
+
+        // The claimed row now occupies the slot.
+        assertThat(requestResponseRepository.countActiveClaims(
+                donor.getId(), RequestResponseStatus.ACCEPTED, RequestResponseStatus.PENDING)).isOne();
+    }
+
+    @Test
+    void shouldRejectAcceptWhenAnotherDonorClaimed() {
+        User otherUser = new User();
+        otherUser.setName("Second Donor");
+        otherUser.setEmail("second" + System.currentTimeMillis() + "@test.com");
+        otherUser.setPassword("pass");
+        otherUser.setRole(UserRole.DONOR);
+        otherUser.setIsActive(true);
+        otherUser.setEmailVerifiedAt(LocalDateTime.now());
+        otherUser.setLocale("en");
+        otherUser = userRepository.save(otherUser);
+
+        Donor otherDonor = new Donor();
+        otherDonor.setUserId(otherUser.getId());
+        otherDonor.setPoints(0);
+        otherDonor.setLevel(1);
+        otherDonor = donorRepository.save(otherDonor);
+
+        DonorHealthProfile otherProfile = DonorHealthProfile.builder()
+                .donor(otherDonor)
+                .weight(80)
+                .height(175)
+                .chronicDisease(false)
+                .infection(false)
+                .isEligible(true)
+                .build();
+        healthProfileRepository.save(otherProfile);
+
+        // Other donor claims the request through scan-confirmed admission.
+        RequestResponse claimed = actionService.accept(otherUser, request.getId(), null, null);
+        actionService.confirmAdmission(claimed.getVerificationQrCode(), org);
+
+        assertThrows(RuntimeException.class, () ->
+                actionService.accept(donorUser, request.getId(), null, null));
+    }
 }

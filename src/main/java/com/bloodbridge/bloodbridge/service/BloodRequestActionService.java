@@ -9,10 +9,12 @@ import com.bloodbridge.bloodbridge.entity.Organization;
 import com.bloodbridge.bloodbridge.entity.RequestResponse;
 import com.bloodbridge.bloodbridge.entity.User;
 import com.bloodbridge.bloodbridge.enumtype.BloodRequestStatus;
+import com.bloodbridge.bloodbridge.enumtype.NotificationType;
 import com.bloodbridge.bloodbridge.enumtype.RequestResponseStatus;
 import com.bloodbridge.bloodbridge.enumtype.UrgencyLevel;
 import com.bloodbridge.bloodbridge.exception.BusinessException;
 import com.bloodbridge.bloodbridge.job.CancelExcessResponsesJob;
+import com.bloodbridge.bloodbridge.notification.DonorResponseNotification;
 import com.bloodbridge.bloodbridge.repository.*;
 import com.bloodbridge.bloodbridge.shared.audit.AuditLogService;
 import com.bloodbridge.bloodbridge.shared.events.DomainEventPublisher;
@@ -38,6 +40,8 @@ public class BloodRequestActionService {
     private final DonorRepository donorRepository;
     private final DonorHealthProfileRepository healthProfileRepository;
     private final OrganizationRepository organizationRepository;
+    private final UserRepository userRepository;
+    private final NotificationService notificationService;
     private final QRCodeService qrCodeService;
     private final CancelExcessResponsesJob cancelExcessResponsesJob;
     private final DomainEventPublisher eventPublisher;
@@ -62,32 +66,42 @@ public class BloodRequestActionService {
         }
 
         List<RequestResponse> allForRequest = requestResponseRepository.findByBloodRequestId(bloodRequestId);
-        boolean alreadyHasDonor = allForRequest.stream().anyMatch(r ->
-                r.getStatus() == RequestResponseStatus.PENDING || r.getStatus() == RequestResponseStatus.ACCEPTED);
-        if (alreadyHasDonor) {
+        boolean alreadyClaimed = allForRequest.stream()
+                .anyMatch(r -> r.getStatus() == RequestResponseStatus.ACCEPTED);
+        if (alreadyClaimed) {
             throw new BusinessException("This blood request already has a donor response");
         }
 
         validateDonorEligibility(donor);
 
-        long activeCount = requestResponseRepository.countByDonorIdAndStatusIn(
-                donor.getId(), List.of(RequestResponseStatus.PENDING, RequestResponseStatus.ACCEPTED));
+        long activeCount = requestResponseRepository.countActiveClaims(
+                donor.getId(), RequestResponseStatus.ACCEPTED, RequestResponseStatus.PENDING);
         if (activeCount >= MAX_ACTIVE_RESPONSES_PER_DONOR) {
             throw new BusinessException("You already have an active response to a blood request");
-        }
-
-        Optional<RequestResponse> existingResponse =
-                requestResponseRepository.findByBloodRequestIdAndDonorId(bloodRequestId, donor.getId());
-        if (existingResponse.isPresent()) {
-            throw new BusinessException("You have already responded to this request");
         }
 
         String qrToken = qrCodeService.generate();
         LocalDateTime qrExpiresAt = qrCodeService.calculateExpiration();
 
-        RequestResponse response = new RequestResponse();
-        response.setBloodRequestId(bloodRequestId);
-        response.setDonorId(donor.getId());
+        // A broadcast offer creates a QR-less PENDING row for each matched donor.
+        // Claiming that offer transitions the existing row instead of inserting
+        // a duplicate (which would trip the "already responded" guard).
+        Optional<RequestResponse> existingResponse =
+                requestResponseRepository.findByBloodRequestIdAndDonorId(bloodRequestId, donor.getId());
+        RequestResponse response;
+        if (existingResponse.isPresent()) {
+            RequestResponse existing = existingResponse.get();
+            if (existing.getVerificationQrCode() != null
+                    || existing.getStatus() != RequestResponseStatus.PENDING) {
+                throw new BusinessException("You have already responded to this request");
+            }
+            response = existing;
+        } else {
+            response = new RequestResponse();
+            response.setBloodRequestId(bloodRequestId);
+            response.setDonorId(donor.getId());
+        }
+
         response.setStatus(RequestResponseStatus.PENDING);
         response.setRespondedAt(LocalDateTime.now());
         response.setVerificationQrCode(qrToken);
@@ -110,6 +124,8 @@ public class BloodRequestActionService {
 
         auditLogService.logSimple("RequestResponse", saved.getId(), "ACCEPTED", donor.getId());
         metrics.incrementQrScan();
+
+        notifyOrganization(saved, bloodRequest);
 
         log.info("Donor {} accepted blood request {} with QR token {} (expires {})",
                 donor.getId(), bloodRequestId, qrToken, qrExpiresAt);
@@ -255,8 +271,38 @@ public class BloodRequestActionService {
         log.info("CancelExcess dispatched for blood request {}", bloodRequest.getId());
     }
 
-    private void validateDonorEligibility(Donor donor) {
-        DonorHealthProfile profile = healthProfileRepository.findByDonorId(donor.getId())
+    /**
+     * Best-effort in-app notification to the owning organization.
+     * Never breaks the acceptance flow.
+     */
+    private void notifyOrganization(RequestResponse saved, BloodRequest bloodRequest) {
+        try {
+            Organization organization = organizationRepository.findById(bloodRequest.getOrganizationId())
+                    .orElse(null);
+            if (organization == null || organization.getUserId() == null) {
+                return;
+            }
+            User orgUser = userRepository.findById(organization.getUserId()).orElse(null);
+            if (orgUser == null) {
+                return;
+            }
+            String bt = bloodRequest.getBloodType() != null ? bloodRequest.getBloodType().name() : "?";
+            notificationService.send(orgUser,
+                    new DonorResponseNotification(
+                            saved.getId(),
+                            bloodRequest.getId(),
+                            "New donor response",
+                            "A donor accepted blood request #" + bloodRequest.getId() + " (" + bt + ")",
+                            "heroicon-o-check",
+                            "success"),
+                    NotificationType.DONOR_RESPONSE);
+        } catch (Exception e) {
+            log.warn("Failed to notify organization {} about response {}",
+                    bloodRequest.getOrganizationId(), saved.getId(), e);
+        }
+    }
+
+    private void validateDonorEligibility(Donor donor) {        DonorHealthProfile profile = healthProfileRepository.findByDonorId(donor.getId())
                 .orElseThrow(() -> new BusinessException("Donor health profile not found"));
 
         if (Boolean.TRUE.equals(profile.getChronicDisease())) {

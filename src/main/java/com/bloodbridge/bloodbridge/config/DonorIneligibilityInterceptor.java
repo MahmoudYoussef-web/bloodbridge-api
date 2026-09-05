@@ -9,6 +9,7 @@ import com.bloodbridge.bloodbridge.repository.OrganizationRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -32,7 +33,7 @@ public class DonorIneligibilityInterceptor implements HandlerInterceptor {
         }
 
         String path = request.getRequestURI();
-        if (path.contains("/ineligible")) {
+        if (path.contains("/ineligible") || path.endsWith("/donor/profile")) {
             return true;
         }
 
@@ -40,8 +41,13 @@ public class DonorIneligibilityInterceptor implements HandlerInterceptor {
                 .map(donor -> {
                     if (donor.getHealthProfile() != null
                             && Boolean.TRUE.equals(donor.getHealthProfile().getChronicDisease())) {
-                        response.setStatus(403);
-                        return false;
+                        try {
+                            return InterceptorUtil.deny(response, HttpStatus.FORBIDDEN, "DONOR_INELIGIBLE",
+                                    "Your health profile is currently marked ineligible for donation.");
+                        } catch (Exception e) {
+                            response.setStatus(403);
+                            return false;
+                        }
                     }
                     return true;
                 })
