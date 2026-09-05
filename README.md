@@ -33,6 +33,7 @@ A production-oriented REST API that matches blood donation requests to eligible 
 - [Blood Request Lifecycle](#-blood-request-lifecycle)
 - [Features](#-features)
 - [API Reference](#-api-reference)
+- [UI Preview](#-ui-preview)
 - [Database Schema](#-database-schema)
 - [Tech Stack](#-tech-stack)
 - [Security](#-security)
@@ -153,7 +154,9 @@ sequenceDiagram
 ## ✨ Features
 
 ### 🔐 Auth & Security
-- JWT access + refresh tokens; BCrypt password hashing
+- JWT access + refresh tokens (logout blacklists the access token); BCrypt password hashing
+- Full password lifecycle: forgot-password (24h token) → reset-password, authenticated change-password
+- Token-based email verification (`verification_token` + expiry, V5 migration) with resend-verification; enforced by interceptor gate
 - Role-based access control (`@PreAuthorize`) — Donor / Organization / Admin
 - Server-side interceptor gates: email verification, donor eligibility, organization approval
 - Ownership validation on all organization-scoped resources (cross-org access → 403)
@@ -163,6 +166,8 @@ sequenceDiagram
 
 ### 🩸 Blood Request Matching
 - Create → broadcast → accept/decline/ignore → QR admission → complete lifecycle
+- Organization create accepts a validated `BloodRequestCreateRequest` DTO (sane defaults: `NORMAL` urgency, 10 km radius)
+- Donor feed supports `bloodType` / `urgency` / `q` filters + pagination; organization listing supports `status` filter + pagination
 - Progressive radius expansion with urgency-scaled donor targets
 - Unknown-blood-type fallback pool for non-critical requests
 - Governorate-based fallback matching when coordinates are unavailable
@@ -179,22 +184,28 @@ sequenceDiagram
 ### 🏢 Organization & Admin
 - Organization profile, request management, response tracking with aggregate counts
 - Admin console: organization approval workflow, platform-wide oversight, announcements, contact messages, settings
+- Public metadata for clients: governorates, platform stats, public settings
+
+### 🔔 Notifications
+- Database-persisted, locale-aware notifications (match pages, responses, announcements)
+- REST API: paginated list with `unreadOnly` filter, unread-count badge, mark-read / mark-all-read (ownership-enforced)
 
 ### 📊 Observability
 - Micrometer metrics exported to Prometheus, Grafana dashboards
-- Structured audit logging on critical operations
+- Structured audit logging on critical operations (logback file appender → `logs/bloodbridge.log`)
 - springdoc OpenAPI / Swagger UI
 
 ---
 
 ## 📡 API Reference
 
-41 endpoints across 5 controllers, all under the `/api` context-path · Full interactive docs at `/swagger-ui/index.html`
+55 endpoints across 6 controllers (+1 dev-only probe under the `h2` profile), all under the `/api` context-path · Full interactive docs at `/swagger-ui/index.html`
 
-<!-- ===== SCREENSHOT SLOT: Swagger UI overview =====
-     Captured from the running API (h2 profile). Regenerate anytime with the app up. -->
+<!-- ===== SCREENSHOT: full endpoint list, Swagger UI =====
+     Captured from the running API (h2 profile) via headless Chrome.
+     Regenerate: chrome --headless --window-size=1400,5600 --screenshot=docs/screenshots/swagger-endpoints.png http://localhost:8080/api/swagger-ui/index.html -->
 <p align="center">
-  <img src="docs/screenshots/swagger-ui.png" width="800" alt="Swagger UI - 41 endpoints across 5 controllers"/>
+  <img src="docs/screenshots/swagger-endpoints.png" width="800" alt="Swagger UI - 55 endpoints across 6 controllers"/>
 </p>
 
 | Method | Endpoint | Role | Description |
@@ -202,6 +213,20 @@ sequenceDiagram
 | `POST` | `/api/v1/auth/register` | Public | Register donor/organization (admin self-registration rejected) |
 | `POST` | `/api/v1/auth/login` | Public | Login → access + refresh token |
 | `POST` | `/api/v1/auth/refresh` | Public | Rotate access token |
+| `POST` | `/api/v1/auth/logout` | Authenticated | Blacklist current access token |
+| `GET` | `/api/v1/auth/profile` | Authenticated | Current user profile + verification flags |
+| `POST` | `/api/v1/auth/forgot-password` | Public | Mint password-reset token (24h expiry) |
+| `POST` | `/api/v1/auth/reset-password` | Public | Consume reset token → set new password |
+| `POST` | `/api/v1/auth/change-password` | Authenticated | Change password (current password required) |
+| `POST` | `/api/v1/auth/verify-email` | Public | Consume email-verification token (V5 migration) |
+| `POST` | `/api/v1/auth/resend-verification` | Public | Re-issue a verification token |
+| `GET` | `/api/v1/notifications` | Authenticated | Paginated notifications (`unreadOnly` filter) |
+| `GET` | `/api/v1/notifications/unread-count` | Authenticated | Unread badge count |
+| `POST` | `/api/v1/notifications/{id}/read` | Authenticated | Mark one notification read (ownership-enforced) |
+| `POST` | `/api/v1/notifications/read-all` | Authenticated | Mark all notifications read |
+| `GET` | `/api/v1/public/governorates` | Public | Active governorates (ordered) |
+| `GET` | `/api/v1/public/stats` | Public | Platform counters (donors, orgs, lives saved, active requests) |
+| `GET` | `/api/v1/public/settings` | Public | Public site settings (name, slogan, support contacts) |
 | `GET` | `/api/v1/donor/profile` | Donor | Donor profile + health data |
 | `GET` | `/api/v1/donor/blood-requests` | Donor | Geo-matched active request feed |
 | `POST` | `/api/v1/donor/blood-requests/{id}/accept` | Donor | Accept request → QR token issued |
@@ -213,13 +238,15 @@ sequenceDiagram
 | `PUT` | `/api/v1/admin/organizations/{id}/approve` | Admin | Approve a pending organization |
 
 <details>
-<summary><b>📂 See all 41 endpoints (grouped by controller)</b></summary>
+<summary><b>📂 See all 55 endpoints (grouped by controller)</b></summary>
 
-**AuthController** — register, login, refresh (3)
-**DonorController** — profile, health profile update, request feed, accept/decline/ignore, QR download, achievements, eligibility status, donation history (10)
-**OrganizationController** — profile, request CRUD/re-broadcast, response listing with aggregates, QR scan, complete (10)
+**AuthController** — register, login, refresh, logout, profile, forgot/reset/change password, verify-email, resend-verification (10)
+**DonorController** — profile, health profile update, request feed (filterable: `bloodType`, `urgency`, `q`; pageable), accept/decline/ignore, QR download, achievements, eligibility status, donation history (10)
+**OrganizationController** — profile, request CRUD/re-broadcast (DTO-validated create, filterable + pageable listing), response listing with aggregates, QR scan, complete (10)
 **AdminController** — paginated users/donors/organizations/blood-requests/responses, organization approve/reject, achievements CRUD, contact messages, announcements, platform settings (17)
-**PublicController** — contact form submission, public announcements (1)
+**PublicController** — contact form submission, governorates, platform stats, public settings (4)
+**NotificationController** — paginated list, unread count, mark read / mark all read (4)
+**DevVerifyProbe** (`h2` profile only) — dev-only email-verification probe (1)
 
 </details>
 
@@ -287,7 +314,7 @@ sequenceDiagram
 
 ## 🗄️ Database Schema
 
-17 domain entities + 3 infrastructure entities · 4 Flyway migrations (base schema, seed data, infrastructure tables, enum-storage migration):
+17 domain entities + 3 infrastructure entities · 5 Flyway migrations (V1 base schema, V2 seed data, V3 infrastructure tables, V4 enum-storage migration, V5 email-verification token columns on `users`):
 
 ```mermaid
 erDiagram
@@ -374,7 +401,7 @@ erDiagram
 | QR Codes | ZXing 3.5.2 | Admission verification |
 | Docs | springdoc OpenAPI 2.6.0 | Swagger UI |
 | Observability | Micrometer + Prometheus + Grafana | Docker Compose services |
-| Testing | JUnit 5, Testcontainers (MySQL), H2 | 112 tests |
+| Testing | JUnit 5, Testcontainers (MySQL), H2 | 169 tests |
 | Build | Maven | Dependency management |
 
 **Declared but not currently wired** (present in `pom.xml`, not active in the code path): Resilience4j (a custom circuit breaker is used instead), Quartz (`@Scheduled` is used instead), WebSocket, Spring Mail, Freemarker, MapStruct.
@@ -424,14 +451,24 @@ Enforced across three layers — Spring Security, interceptors, and service-leve
 
 | Limitation | Detail |
 |---|---|
-| Production email verification | The verification gate is enforced, but no production mail-sending flow exists yet — no mail integration, no public verification endpoint. A dev-only `POST /v1/public/verify-dev` endpoint exists strictly under the `h2` profile (`@Profile("h2")` + runtime profile guard, unreachable in production) for local testing. A real token-based email verification flow is required before production rollout. |
-| Password reset | The frontend has Forgot/Reset password pages, but no corresponding backend endpoint exists yet; these pages will fail if used. |
-| Change password | The donor and organization panels have Change Password pages, but no corresponding backend endpoint exists yet; these pages will fail if used. |
-| Email verification page | The frontend's `/verify-email` page has no backend endpoint; verification is only possible via the dev-only h2 probe. |
+| Production email sending | Token-based email verification is fully implemented (register mints a 24h token, `POST /v1/auth/verify-email` consumes it, the interceptor enforces it), but no production **mail-sending** integration exists yet — verification emails and password-reset emails are not actually delivered. Under the `h2` profile the API returns the tokens as `devResetToken` / `devVerificationToken` so the full flow is testable locally; a real mail provider is required before production rollout. The dev-only `POST /v1/public/verify-dev` probe also remains, strictly under the `h2` profile. |
 | Organization approval bypass | The full approval workflow (PENDING/APPROVED/REJECTED, admin approve/reject endpoints, enforcement interceptor) is implemented, but `register()` currently hardcodes new organizations as `APPROVED` — an intentional demo simplification so organizations are usable immediately. Re-enabling real approvals is a separate design decision. |
 | ML scoring service | Disabled by default (`ml-enabled: false`); the FastAPI companion service lives outside this repository. The platform runs fully on the rule-based fallback scorer without it. |
 | Rate limiting scope | In-memory, single-instance — not distributed across multiple app instances. |
 | Notification delivery | Notifications are persisted to the database only; no email/SMS/push delivery is wired yet. |
+
+---
+
+## 🖥️ UI Preview
+
+The companion React frontend (Vite + Tailwind) consumes the public, auth, and notification endpoints above — live stat counters on the home page are served by `GET /api/v1/public/stats`, and the login form links directly into the forgot/reset-password flow.
+
+<p align="center">
+  <img src="docs/screenshots/ui-home.png" width="800" alt="BloodBridge home page - hero and live broadcast card"/>
+</p>
+<p align="center">
+  <img src="docs/screenshots/ui-login.png" width="800" alt="BloodBridge login page with forgot-password link"/>
+</p>
 
 ---
 
@@ -446,10 +483,11 @@ Enforced across three layers — Spring Security, interceptors, and service-leve
 
 ```bash
 mvn package -DskipTests
-java -jar target/bloodbridge-1.0.0-SNAPSHOT.jar --spring.profiles.active=h2
+java -jar target/bloodbridge-1.0.0-SNAPSHOT.jar
 ```
 
-Starts on `http://localhost:8080/api`, seeded with sample data via `data.sql` + Flyway.
+`h2` is the default Spring profile, so no database setup is needed (explicit `--spring.profiles.active=h2` also works).
+Starts on `http://localhost:8080/api`, seeded with sample data via `data.sql`.
 
 ### Backend — MySQL
 
@@ -464,7 +502,7 @@ java -jar target/bloodbridge-1.0.0-SNAPSHOT.jar
 ```bash
 cd bloodbridge-frontend
 npm install
-npm run dev   # http://localhost:5173, proxies to /api
+npm run dev   # http://localhost:3000, proxies /api to the backend
 ```
 
 ### Docker Compose
