@@ -14,6 +14,9 @@ public interface AnnouncementRepository extends JpaRepository<Announcement, Long
     @Query("SELECT a FROM Announcement a WHERE a.isPublished = true AND a.deletedAt IS NULL ORDER BY a.publishedAt DESC")
     List<Announcement> findPublishedOrderByPublishedAtDesc();
 
+    @Query("SELECT a FROM Announcement a WHERE a.isPublished = true AND a.deletedAt IS NULL ORDER BY a.publishedAt DESC")
+    List<Announcement> findTop6PublishedOrderByPublishedAtDesc(org.springframework.data.domain.Pageable pageable);
+
     @Query("SELECT a FROM Announcement a WHERE a.isPublished = false AND a.deletedAt IS NULL ORDER BY a.createdAt DESC")
     List<Announcement> findDraftsOrderByCreatedAtDesc();
 }

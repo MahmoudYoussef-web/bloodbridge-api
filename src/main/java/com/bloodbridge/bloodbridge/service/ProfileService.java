@@ -98,6 +98,8 @@ public class ProfileService {
         if (request.getBloodType() != null) hp.setBloodType(request.getBloodType());
         if (request.getChronicDisease() != null) hp.setChronicDisease(request.getChronicDisease());
         if (request.getInfection() != null) hp.setInfection(request.getInfection());
+        if (request.getRecentDonation() != null) hp.setRecentDonation(request.getRecentDonation());
+        if (request.getLastDonationDate() != null) hp.setLastDonationDate(request.getLastDonationDate());
         if (request.getHasRecentSurgery() != null) hp.setHasRecentSurgery(request.getHasRecentSurgery());
         if (request.getSurgeryDate() != null) hp.setSurgeryDate(request.getSurgeryDate());
 
@@ -148,7 +150,7 @@ public class ProfileService {
                 .workingDays(workingDaysList)
                 .dailyCapacity(org.getDailyCapacity())
                 .governorateId(org.getGovernorateId())
-                .approvalStatus(org.getApprovalStatus() != null ? org.getApprovalStatus().ordinal() : null)
+                .approvalStatus(org.getApprovalStatus() != null ? org.getApprovalStatus().getValue() : null)
                 .rejectionReason(org.getRejectionReason())
                 .createdAt(org.getCreatedAt() != null ? org.getCreatedAt().toString() : null)
                 .updatedAt(org.getUpdatedAt() != null ? org.getUpdatedAt().toString() : null)

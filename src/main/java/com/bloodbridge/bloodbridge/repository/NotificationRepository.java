@@ -1,6 +1,8 @@
 package com.bloodbridge.bloodbridge.repository;
 
 import com.bloodbridge.bloodbridge.entity.Notification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -16,8 +18,14 @@ public interface NotificationRepository extends JpaRepository<Notification, Stri
     @Query("SELECT n FROM Notification n WHERE n.notifiableType = :type AND n.notifiableId = :id ORDER BY n.createdAt DESC")
     List<Notification> findByNotifiable(@Param("type") String notifiableType, @Param("id") Long notifiableId);
 
+    @Query("SELECT n FROM Notification n WHERE n.notifiableType = :type AND n.notifiableId = :id ORDER BY n.createdAt DESC")
+    Page<Notification> findPageByNotifiable(@Param("type") String notifiableType, @Param("id") Long notifiableId, Pageable pageable);
+
     @Query("SELECT n FROM Notification n WHERE n.notifiableType = :type AND n.notifiableId = :id AND n.readAt IS NULL ORDER BY n.createdAt DESC")
     List<Notification> findUnreadByNotifiable(@Param("type") String notifiableType, @Param("id") Long notifiableId);
+
+    @Query("SELECT n FROM Notification n WHERE n.notifiableType = :type AND n.notifiableId = :id AND n.readAt IS NULL ORDER BY n.createdAt DESC")
+    Page<Notification> findUnreadPageByNotifiable(@Param("type") String notifiableType, @Param("id") Long notifiableId, Pageable pageable);
 
     long countByNotifiableTypeAndNotifiableIdAndReadAtIsNull(String notifiableType, Long notifiableId);
 

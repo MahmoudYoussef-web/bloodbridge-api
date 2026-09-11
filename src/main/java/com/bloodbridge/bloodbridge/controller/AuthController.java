@@ -13,6 +13,8 @@ import com.bloodbridge.bloodbridge.dto.ResetPasswordRequest;
 import com.bloodbridge.bloodbridge.dto.VerifyEmailRequest;
 import com.bloodbridge.bloodbridge.entity.User;
 import com.bloodbridge.bloodbridge.service.AuthService;
+import com.bloodbridge.bloodbridge.service.RateLimitService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,19 +28,40 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final RateLimitService rateLimitService;
+
+    private boolean hitLimit(String endpoint, String clientId, int max, int windowSeconds) {
+        return !rateLimitService.checkEndpointLimit("auth:" + endpoint, clientId, max, windowSeconds);
+    }
+
+    private String clientIp(HttpServletRequest request) {
+        return request != null ? request.getRemoteAddr() : "unknown";
+    }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+        if (hitLimit("register", clientIp(http), 5, 60)) {
+            return ResponseEntity.status(429)
+                    .body(java.util.Map.of("error", "Too many attempts. Please try again later."));
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> authenticate(@Valid @RequestBody AuthRequest request) {
+    public ResponseEntity<?> authenticate(@Valid @RequestBody AuthRequest request, HttpServletRequest http) {
+        if (hitLimit("login", clientIp(http) + ":" + request.getEmail(), 10, 60)) {
+            return ResponseEntity.status(429)
+                    .body(java.util.Map.of("error", "Too many attempts. Please try again later."));
+        }
         return ResponseEntity.ok(authService.authenticate(request));
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<AuthResponse> refresh(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<?> refresh(@RequestHeader("Authorization") String authHeader, HttpServletRequest http) {
+        if (hitLimit("refresh", clientIp(http), 30, 60)) {
+            return ResponseEntity.status(429)
+                    .body(java.util.Map.of("error", "Too many attempts. Please try again later."));
+        }
         String refreshToken = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
         return ResponseEntity.ok(authService.refreshToken(refreshToken));
     }
@@ -66,12 +89,20 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<ForgotPasswordResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest http) {
+        if (hitLimit("forgot", clientIp(http) + ":" + request.getEmail(), 3, 60)) {
+            return ResponseEntity.status(429)
+                    .body(java.util.Map.of("error", "Too many attempts. Please try again later."));
+        }
         return ResponseEntity.ok(authService.forgotPassword(request));
     }
 
     @PostMapping("/reset-password")
-    public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+    public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request, HttpServletRequest http) {
+        if (hitLimit("reset", clientIp(http), 10, 60)) {
+            return ResponseEntity.status(429)
+                    .body(new MessageResponse("Too many attempts. Please try again later."));
+        }
         return ResponseEntity.ok(authService.resetPassword(request));
     }
 
@@ -82,12 +113,21 @@ public class AuthController {
     }
 
     @PostMapping("/verify-email")
-    public ResponseEntity<MessageResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+    public ResponseEntity<?> verifyEmail(@Valid @RequestBody VerifyEmailRequest request, HttpServletRequest http) {
+        if (hitLimit("verify", clientIp(http), 10, 60)) {
+            return ResponseEntity.status(429)
+                    .body(java.util.Map.of("error", "Too many attempts. Please try again later."));
+        }
         return ResponseEntity.ok(authService.verifyEmail(request));
     }
 
     @PostMapping("/resend-verification")
-    public ResponseEntity<ResendVerificationResponse> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+    public ResponseEntity<?> resendVerification(@Valid @RequestBody ResendVerificationRequest request, HttpServletRequest http) {
+        if (!rateLimitService.tryEmailVerification(request.getEmail())
+                || hitLimit("resend", clientIp(http), 10, 60)) {
+            return ResponseEntity.status(429)
+                    .body(java.util.Map.of("error", "Too many attempts. Please try again later."));
+        }
         return ResponseEntity.ok(authService.resendVerification(request));
     }
 }

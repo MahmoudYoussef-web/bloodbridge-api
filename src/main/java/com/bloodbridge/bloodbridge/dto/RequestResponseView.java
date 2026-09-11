@@ -7,11 +7,11 @@ package com.bloodbridge.bloodbridge.dto;
  * Replaces the raw {@code RequestResponse} entity in:
  *   - GET /donor/responses          (DonorHistory, DonorDashboard)
  *   - GET /org/responses            (OrgDashboard, OrgStatistics)
+ *   - GET /org/blood-requests/{id}/responses (OrgViewBloodRequest)
+ *   - GET /admin/responses          (AdminResponseView, QR-free by construction)
  *
- * NOT YET wired into (no live consumers today):
- *   - GET /org/blood-requests/{id}/responses
- *   - GET /admin/responses
- * Those endpoints still return raw {@code RequestResponse} entities.
+ * No list endpoint returns raw {@code RequestResponse} entities anymore;
+ * QR tokens only ever go to the owning donor (accept flow + QR download).
  *
  * Excluded (no list-screen reads them):
  *   - donorId, verificationQrCode, qrCodeExpiresAt,

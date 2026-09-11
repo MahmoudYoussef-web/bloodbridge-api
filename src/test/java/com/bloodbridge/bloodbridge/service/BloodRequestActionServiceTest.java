@@ -257,38 +257,52 @@ class BloodRequestActionServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldRejectAcceptWhenAnotherDonorClaimed() {
-        User otherUser = new User();
-        otherUser.setName("Second Donor");
-        otherUser.setEmail("second" + System.currentTimeMillis() + "@test.com");
-        otherUser.setPassword("pass");
-        otherUser.setRole(UserRole.DONOR);
-        otherUser.setIsActive(true);
-        otherUser.setEmailVerifiedAt(LocalDateTime.now());
-        otherUser.setLocale("en");
-        otherUser = userRepository.save(otherUser);
+    void shouldAllowAcceptsUpToUnitsNeededThenReject() {
+        // Request fixture needs 2 units: two admissions fill the quota.
+        User otherUser = newDonorUser("second");
+        Donor otherDonor = newDonor(otherUser);
 
-        Donor otherDonor = new Donor();
-        otherDonor.setUserId(otherUser.getId());
-        otherDonor.setPoints(0);
-        otherDonor.setLevel(1);
-        otherDonor = donorRepository.save(otherDonor);
+        // First admission fills 1 of 2 units.
+        RequestResponse claimed = actionService.accept(otherUser, request.getId(), null, null);
+        actionService.confirmAdmission(claimed.getVerificationQrCode(), org);
 
-        DonorHealthProfile otherProfile = DonorHealthProfile.builder()
-                .donor(otherDonor)
+        // Second donor may still accept while quota remains.
+        RequestResponse second = actionService.accept(donorUser, request.getId(), null, null);
+        actionService.confirmAdmission(second.getVerificationQrCode(), org);
+
+        // Quota full (2 admitted of 2 needed) -> third donor is rejected.
+        User thirdUser = newDonorUser("third");
+        newDonor(thirdUser);
+        assertThrows(RuntimeException.class, () ->
+                actionService.accept(thirdUser, request.getId(), null, null));
+    }
+
+    private User newDonorUser(String prefix) {
+        User u = new User();
+        u.setName(prefix + " Donor");
+        u.setEmail(prefix + System.currentTimeMillis() + "@test.com");
+        u.setPassword("pass");
+        u.setRole(UserRole.DONOR);
+        u.setIsActive(true);
+        u.setEmailVerifiedAt(LocalDateTime.now());
+        u.setLocale("en");
+        return userRepository.save(u);
+    }
+
+    private Donor newDonor(User user) {
+        Donor d = new Donor();
+        d.setUserId(user.getId());
+        d.setPoints(0);
+        d.setLevel(1);
+        d = donorRepository.save(d);
+        healthProfileRepository.save(DonorHealthProfile.builder()
+                .donor(d)
                 .weight(80)
                 .height(175)
                 .chronicDisease(false)
                 .infection(false)
                 .isEligible(true)
-                .build();
-        healthProfileRepository.save(otherProfile);
-
-        // Other donor claims the request through scan-confirmed admission.
-        RequestResponse claimed = actionService.accept(otherUser, request.getId(), null, null);
-        actionService.confirmAdmission(claimed.getVerificationQrCode(), org);
-
-        assertThrows(RuntimeException.class, () ->
-                actionService.accept(donorUser, request.getId(), null, null));
+                .build());
+        return d;
     }
 }

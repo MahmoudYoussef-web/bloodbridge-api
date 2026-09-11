@@ -12,7 +12,9 @@ import com.bloodbridge.bloodbridge.entity.PasswordResetToken;
 import com.bloodbridge.bloodbridge.entity.User;
 import com.bloodbridge.bloodbridge.enumtype.UserRole;
 import com.bloodbridge.bloodbridge.exception.BusinessException;
+import com.bloodbridge.bloodbridge.jwt.InMemoryTokenBlacklist;
 import com.bloodbridge.bloodbridge.jwt.JwtService;
+import com.bloodbridge.bloodbridge.repository.DonorHealthProfileRepository;
 import com.bloodbridge.bloodbridge.repository.DonorRepository;
 import com.bloodbridge.bloodbridge.repository.OrganizationRepository;
 import com.bloodbridge.bloodbridge.repository.PasswordResetTokenRepository;
@@ -49,14 +51,16 @@ class AuthServiceTest {
     @Mock private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock private Environment environment;
     @Mock private ObjectProvider<com.bloodbridge.bloodbridge.shared.domain.RedisRateLimiter> redisRateLimiterProvider;
+    @Mock private DonorHealthProfileRepository healthProfileRepository;
+    @Mock private InMemoryTokenBlacklist inMemoryTokenBlacklist;
 
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         authService = new AuthService(userRepository, passwordEncoder, jwtService, authenticationManager,
-                donorRepository, organizationRepository, passwordResetTokenRepository, environment,
-                redisRateLimiterProvider);
+                donorRepository, healthProfileRepository, organizationRepository, passwordResetTokenRepository,
+                environment, redisRateLimiterProvider, inMemoryTokenBlacklist);
     }
 
     @Test
@@ -177,12 +181,12 @@ class AuthServiceTest {
                 .email("user@test.com")
                 .name("User")
                 .role(UserRole.DONOR)
+                .isActive(true)
                 .build();
 
-        when(jwtService.isTokenValid(refreshToken)).thenReturn(true);
+        when(jwtService.isRefreshToken(refreshToken)).thenReturn(true);
         when(jwtService.extractUsername(refreshToken)).thenReturn("user@test.com");
         when(jwtService.extractUserId(refreshToken)).thenReturn(1L);
-        when(jwtService.extractRole(refreshToken)).thenReturn("DONOR");
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(jwtService.generateToken(any(), any(), any())).thenReturn("new-token");
         when(jwtService.generateRefreshToken(any(), any(), any())).thenReturn("new-refresh");
@@ -310,6 +314,67 @@ class AuthServiceTest {
         assertThat(user.getEmailVerifiedAt()).isNotNull();
         assertThat(user.getVerificationToken()).isNull();
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void shouldRejectRefreshWithAccessToken() {
+        when(jwtService.isRefreshToken("access-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.refreshToken("access-token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Invalid or expired refresh token");
+    }
+
+    @Test
+    void shouldRejectRefreshForDisabledAccount() {
+        User user = User.builder()
+                .id(1L)
+                .email("user@test.com")
+                .role(UserRole.DONOR)
+                .isActive(false)
+                .build();
+
+        when(jwtService.isRefreshToken("rt")).thenReturn(true);
+        when(jwtService.extractUsername("rt")).thenReturn("user@test.com");
+        when(jwtService.extractUserId("rt")).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.refreshToken("rt"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("disabled");
+    }
+
+    @Test
+    void shouldReturnGenericResponseForUnknownResendEmail() {
+        when(userRepository.findByEmailAndDeletedAtIsNull("ghost@test.com")).thenReturn(Optional.empty());
+
+        var response = authService.resendVerification(
+                com.bloodbridge.bloodbridge.dto.ResendVerificationRequest.builder().email("ghost@test.com").build());
+
+        assertThat(response.message()).contains("If that email is registered");
+        assertThat(response.devVerificationToken()).isNull();
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldCreateHealthProfileOnDonorRegister() {
+        RegisterRequest request = RegisterRequest.builder()
+                .name("Test Donor")
+                .email("donor@test.com")
+                .password("password123")
+                .passwordConfirmation("password123")
+                .role("DONOR")
+                .build();
+
+        when(userRepository.existsByEmail("donor@test.com")).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("encoded");
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(jwtService.generateToken(any(), any(), any())).thenReturn("token");
+        when(jwtService.generateRefreshToken(any(), any(), any())).thenReturn("refresh");
+
+        authService.register(request);
+
+        verify(healthProfileRepository).save(any(com.bloodbridge.bloodbridge.entity.DonorHealthProfile.class));
     }
 
     @Test

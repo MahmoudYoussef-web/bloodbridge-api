@@ -1,6 +1,7 @@
 package com.bloodbridge.bloodbridge.entity;
 
 import com.bloodbridge.bloodbridge.enumtype.OrganizationStatus;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -110,10 +111,12 @@ public class Organization {
     @JoinColumn(name = "user_id", insertable = false, updatable = false)
     private User user;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "governorate_id", insertable = false, updatable = false)
     private Governorate governorate;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "organization", fetch = FetchType.LAZY)
     private java.util.List<BloodRequest> bloodRequests;
     

@@ -101,6 +101,7 @@ services:
       - bloodbridge-network
 
   ai-service:
+    profiles: ["ai"]
     build:
       context: ../bloodbridge-main/ai_service
       dockerfile: Dockerfile

@@ -1,6 +1,7 @@
 package com.bloodbridge.bloodbridge.entity;
 
 import com.bloodbridge.bloodbridge.enumtype.Gender;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -25,7 +26,7 @@ public class Donor {
     @Column(name = "governorate_id")
     private Long governorateId;
 
-    @Column(name = "national_id", length = 9, unique = true)
+    @Column(name = "national_id", length = 14, unique = true)
     private String nationalId;
 
     @Convert(converter = com.bloodbridge.bloodbridge.converter.GenderConverter.class)
@@ -67,6 +68,7 @@ public class Donor {
     @JoinColumn(name = "user_id", insertable = false, updatable = false)
     private User user;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "governorate_id", insertable = false, updatable = false)
     private Governorate governorate;
@@ -74,15 +76,19 @@ public class Donor {
     @OneToOne(mappedBy = "donor", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private DonorHealthProfile healthProfile;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "donor", fetch = FetchType.LAZY)
     private java.util.List<RequestResponse> responses;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "donor", fetch = FetchType.LAZY)
     private java.util.List<EligibilityLog> eligibilityLogs;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "donor", fetch = FetchType.LAZY)
     private java.util.List<DonorAchievement> donorAchievements;
 
+    @JsonIgnore
     @OneToOne(mappedBy = "donor", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private DonorPredictiveScore predictiveScore;
 

@@ -1,6 +1,8 @@
 package com.bloodbridge.bloodbridge.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -25,6 +27,7 @@ public class Achievement {
 
     @Convert(converter = com.bloodbridge.bloodbridge.converter.JsonStringConverter.class)
     @Column(name = "name", nullable = false, columnDefinition = "JSON")
+    @NotBlank(message = "Name is required")
     private String name;
 
     @Convert(converter = com.bloodbridge.bloodbridge.converter.JsonStringConverter.class)
@@ -33,6 +36,7 @@ public class Achievement {
 
     @Column(name = "points_rewards")
     @Builder.Default
+    @Min(value = 0, message = "Points must be zero or positive")
     private Integer pointsRewards = 0;
 
     @Column(name = "badge_icon", length = 255)
@@ -42,14 +46,17 @@ public class Achievement {
     private String badgeType;
 
     @Column(name = "criteria_type", nullable = false, length = 255)
+    @NotBlank(message = "Criteria type is required")
     private String criteriaType;
 
     @Column(name = "criteria_value")
     @Builder.Default
+    @Min(value = 0, message = "Criteria value must be zero or positive")
     private Integer criteriaValue = 0;
 
     @Column(name = "display_order")
     @Builder.Default
+    @Min(value = 0, message = "Display order must be zero or positive")
     private Integer displayOrder = 0;
 
     @CreationTimestamp

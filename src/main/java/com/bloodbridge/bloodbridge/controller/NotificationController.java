@@ -8,7 +8,6 @@ import com.bloodbridge.bloodbridge.exception.ResourceNotFoundException;
 import com.bloodbridge.bloodbridge.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -44,15 +42,11 @@ public class NotificationController {
             @AuthenticationPrincipal User user,
             @RequestParam(required = false, defaultValue = "false") boolean unreadOnly,
             @PageableDefault(size = 20) Pageable pageable) {
-        List<Notification> all = unreadOnly
-                ? notificationRepository.findUnreadByNotifiable(NOTIFIABLE_TYPE, user.getId())
-                : notificationRepository.findByNotifiable(NOTIFIABLE_TYPE, user.getId());
-        List<NotificationResponse> views = all.stream().map(this::toView).toList();
-
-        int start = (int) Math.min(pageable.getOffset(), views.size());
-        int end = Math.min(start + pageable.getPageSize(), views.size());
-        Page<NotificationResponse> page = new PageImpl<>(views.subList(start, end), pageable, views.size());
-        return ResponseEntity.ok(page);
+        Page<Notification> page = unreadOnly
+                ? notificationRepository.findUnreadPageByNotifiable(NOTIFIABLE_TYPE, user.getId(), pageable)
+                : notificationRepository.findPageByNotifiable(NOTIFIABLE_TYPE, user.getId(), pageable);
+        Page<NotificationResponse> views = page.map(this::toView);
+        return ResponseEntity.ok(views);
     }
 
     @GetMapping("/unread-count")

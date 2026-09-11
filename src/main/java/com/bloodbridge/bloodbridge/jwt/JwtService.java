@@ -4,16 +4,22 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
 @Component
+@Slf4j
 public class JwtService {
 
     @Value("${bloodbridge.jwt.secret}")
@@ -24,6 +30,19 @@ public class JwtService {
 
     @Value("${bloodbridge.jwt.refresh-expiration}")
     private long refreshExpiration;
+
+    @PostConstruct
+    void validateSecret() {
+        if (secretKey == null || secretKey.isBlank()) {
+            throw new IllegalStateException("bloodbridge.jwt.secret must be set (base64 or plain text, min 16 chars)");
+        }
+        if (secretKey.length() < 16) {
+            throw new IllegalStateException("bloodbridge.jwt.secret is too short, use at least 16 characters");
+        }
+        if (secretKey.startsWith("YXNkZmdoamts")) {
+            log.warn("SECURITY: using the built-in default JWT secret. Set JWT_SECRET env var in production!");
+        }
+    }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
@@ -37,6 +56,18 @@ public class JwtService {
         return extractClaim(token, claims -> claims.get("role", String.class));
     }
 
+    public String extractType(String token) {
+        return extractClaim(token, claims -> claims.get("type", String.class));
+    }
+
+    public boolean isRefreshToken(String token) {
+        try {
+            return "refresh".equals(extractType(token)) && isTokenValid(token);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
@@ -46,6 +77,7 @@ public class JwtService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("role", role);
+        claims.put("type", "access");
         return buildToken(claims, email, jwtExpiration);
     }
 
@@ -53,6 +85,7 @@ public class JwtService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("role", role);
+        claims.put("type", "refresh");
         return buildToken(claims, email, refreshExpiration);
     }
 
@@ -105,7 +138,19 @@ public class JwtService {
     }
 
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+        byte[] keyBytes;
+        try {
+            keyBytes = Decoders.BASE64.decode(secretKey);
+        } catch (Exception e) {
+            // Accept plain-text secrets by deriving a 256-bit key (SHA-256).
+            // Previously any non-base64 secret crashed every auth call with a 500.
+            try {
+                keyBytes = MessageDigest.getInstance("SHA-256")
+                        .digest(secretKey.getBytes(StandardCharsets.UTF_8));
+            } catch (NoSuchAlgorithmException ex) {
+                throw new IllegalStateException("Cannot derive JWT signing key", ex);
+            }
+        }
         return Keys.hmacShaKeyFor(keyBytes);
     }
 }

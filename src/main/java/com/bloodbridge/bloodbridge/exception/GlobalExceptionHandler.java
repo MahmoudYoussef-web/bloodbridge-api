@@ -104,10 +104,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ProblemDetails> handleDataIntegrity(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMessage());
+        String message = ex.getMessage() != null ? ex.getMessage().toUpperCase() : "";
+        String detail = "The request conflicts with existing data (duplicate or invalid reference)";
+        if (message.contains("NATIONAL_ID")) {
+            detail = "National ID must be exactly 14 digits and unique";
+        }
         ProblemDetails problem = ProblemDetails.of(
                 HttpStatus.CONFLICT.value(),
                 "DATA_CONFLICT",
-                "The request conflicts with existing data (duplicate or invalid reference)"
+                detail
         );
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }

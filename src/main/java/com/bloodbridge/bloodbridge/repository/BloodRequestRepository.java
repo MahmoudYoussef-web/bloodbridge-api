@@ -5,6 +5,7 @@ import com.bloodbridge.bloodbridge.enumtype.BloodRequestStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -21,6 +22,10 @@ public interface BloodRequestRepository extends JpaRepository<BloodRequest, Long
 
     List<BloodRequest> findByOrganizationIdOrderByCreatedAtDesc(Long organizationId);
 
+    @EntityGraph(attributePaths = {"organization"})
+    @Query("SELECT br FROM BloodRequest br")
+    Page<BloodRequest> findAllForAdmin(Pageable pageable);
+
     long countByStatus(BloodRequestStatus status);
 
     Page<BloodRequest> findByOrganizationIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long organizationId, Pageable pageable);
@@ -33,6 +38,9 @@ public interface BloodRequestRepository extends JpaRepository<BloodRequest, Long
 
     @Query("SELECT br FROM BloodRequest br WHERE br.status = :status AND br.fulfilledAt IS NULL AND br.deletedAt IS NULL ORDER BY br.createdAt DESC")
     List<BloodRequest> findActiveByStatus(@Param("status") BloodRequestStatus status);
+
+    @Query("SELECT br FROM BloodRequest br WHERE br.status = :status AND br.fulfilledAt IS NULL AND br.deletedAt IS NULL ORDER BY br.broadcastedAt DESC")
+    Page<BloodRequest> findActiveByStatus(@Param("status") BloodRequestStatus status, Pageable pageable);
 
     @Query("SELECT br FROM BloodRequest br WHERE br.status IN :statuses AND br.createdAt <= :threshold AND br.fulfilledAt IS NULL AND br.deletedAt IS NULL")
     List<BloodRequest> findByStatusInAndCreatedAtBefore(

@@ -1,8 +1,11 @@
 package com.bloodbridge.bloodbridge.repository;
 
+import com.bloodbridge.bloodbridge.dto.AdminResponseView;
 import com.bloodbridge.bloodbridge.entity.RequestResponse;
 import com.bloodbridge.bloodbridge.enumtype.RequestResponseStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -69,6 +72,21 @@ public interface RequestResponseRepository extends JpaRepository<RequestResponse
 
     @Query("SELECT rr FROM RequestResponse rr WHERE rr.bloodRequestId = :requestId AND rr.donorId IN :donorIds AND rr.deletedAt IS NULL")
     List<RequestResponse> findByBloodRequestIdAndDonorIdIn(@Param("requestId") Long requestId, @Param("donorIds") List<Long> donorIds);
+
+    /**
+     * Admin listing as flat DTOs: names are joined in one query and no
+     * entity (in particular no QR token) is ever serialized.
+     */
+    @Query("""
+        SELECT new com.bloodbridge.bloodbridge.dto.AdminResponseView(
+            rr.id, rr.bloodRequestId, rr.donorId, u.name, o.orgName, rr.status,
+            rr.respondedAt, rr.verifiedAt, rr.createdAt)
+        FROM RequestResponse rr
+        LEFT JOIN rr.donor d LEFT JOIN d.user u
+        LEFT JOIN rr.bloodRequest br LEFT JOIN br.organization o
+        WHERE rr.deletedAt IS NULL
+        """)
+    Page<AdminResponseView> findAllForAdmin(Pageable pageable);
 
     @Query("SELECT rr FROM RequestResponse rr WHERE rr.bloodRequest.organizationId = :organizationId AND rr.deletedAt IS NULL ORDER BY rr.respondedAt DESC")
     List<RequestResponse> findByBloodRequest_OrganizationId(@Param("organizationId") Long organizationId);

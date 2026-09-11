@@ -66,10 +66,13 @@ public class BloodRequestActionService {
         }
 
         List<RequestResponse> allForRequest = requestResponseRepository.findByBloodRequestId(bloodRequestId);
-        boolean alreadyClaimed = allForRequest.stream()
-                .anyMatch(r -> r.getStatus() == RequestResponseStatus.ACCEPTED);
-        if (alreadyClaimed) {
-            throw new BusinessException("This blood request already has a donor response");
+        int unitsNeeded = bloodRequest.getUnitsNeeded() != null && bloodRequest.getUnitsNeeded() > 0
+                ? bloodRequest.getUnitsNeeded() : 1;
+        long admittedCount = allForRequest.stream()
+                .filter(r -> r.getStatus() == RequestResponseStatus.ACCEPTED)
+                .count();
+        if (admittedCount >= unitsNeeded) {
+            throw new BusinessException("This blood request already has enough donors");
         }
 
         validateDonorEligibility(donor);
@@ -127,8 +130,8 @@ public class BloodRequestActionService {
 
         notifyOrganization(saved, bloodRequest);
 
-        log.info("Donor {} accepted blood request {} with QR token {} (expires {})",
-                donor.getId(), bloodRequestId, qrToken, qrExpiresAt);
+        log.info("Donor {} accepted blood request {} (QR expires {})",
+                donor.getId(), bloodRequestId, qrExpiresAt);
 
         return saved;
     }
@@ -140,7 +143,8 @@ public class BloodRequestActionService {
 
         RequestResponse response = requestResponseRepository
                 .findByBloodRequestIdAndDonorId(bloodRequestId, donor.getId())
-                .orElseThrow(() -> new BusinessException("Response not found"));
+                .orElseThrow(() -> new BusinessException(
+                        "No response found for this request. Only notified offers can be declined."));
 
         if (response.getStatus() != RequestResponseStatus.PENDING
                 && response.getStatus() != RequestResponseStatus.ACCEPTED) {
@@ -161,7 +165,8 @@ public class BloodRequestActionService {
 
         RequestResponse response = requestResponseRepository
                 .findByBloodRequestIdAndDonorId(bloodRequestId, donor.getId())
-                .orElseThrow(() -> new BusinessException("Response not found"));
+                .orElseThrow(() -> new BusinessException(
+                        "No response found for this request. Only notified offers can be dismissed."));
 
         if (response.getStatus() != RequestResponseStatus.PENDING) {
             throw new BusinessException("Can only ignore PENDING responses");

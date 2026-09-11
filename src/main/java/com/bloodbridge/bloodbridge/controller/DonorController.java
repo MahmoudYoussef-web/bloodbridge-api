@@ -17,10 +17,6 @@ import com.bloodbridge.bloodbridge.service.ProfileService;
 import com.bloodbridge.bloodbridge.service.RequestResponseViewAssembler;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +29,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/v1/donor")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('DONOR')")
 public class DonorController {
 
     private final DonorRepository donorRepository;
@@ -43,36 +40,27 @@ public class DonorController {
     private final RequestResponseViewAssembler responseViewAssembler;
 
     @GetMapping("/blood-requests")
-    public ResponseEntity<?> getActiveRequests(
+    public ResponseEntity<List<BloodRequestCardResponse>> getActiveRequests(
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) String bloodType,
             @RequestParam(required = false) String urgency,
-            @RequestParam(required = false) String q,
-            @PageableDefault(size = 20) Pageable pageable,
-            @RequestParam(required = false) Boolean paged) {
+            @RequestParam(required = false) String q) {
         List<BloodRequestCardResponse> all = profileService.getDonorActiveRequests(user.getId(), null, null);
 
-        boolean filtering = bloodType != null || urgency != null || q != null
-                || Boolean.TRUE.equals(paged) || pageable.getPageNumber() > 0;
-        if (!filtering) {
+        if (bloodType == null && urgency == null && (q == null || q.isBlank())) {
             return ResponseEntity.ok(all);
         }
-
+        String needle = q == null ? null : q.toLowerCase();
         List<BloodRequestCardResponse> filtered = all.stream()
                 .filter(r -> bloodType == null || bloodType.equalsIgnoreCase(String.valueOf(r.bloodType())))
                 .filter(r -> urgency == null || urgency.equalsIgnoreCase(String.valueOf(r.urgencyLevel())))
                 .filter(r -> {
-                    if (q == null || q.isBlank()) return true;
-                    String needle = q.toLowerCase();
+                    if (needle == null || needle.isBlank()) return true;
                     return (r.organizationName() != null && r.organizationName().toLowerCase().contains(needle))
                             || (r.locationAddress() != null && r.locationAddress().toLowerCase().contains(needle));
                 })
                 .toList();
-
-        int start = (int) Math.min(pageable.getOffset(), filtered.size());
-        int end = Math.min(start + pageable.getPageSize(), filtered.size());
-        Page<BloodRequestCardResponse> page = new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
-        return ResponseEntity.ok(page);
+        return ResponseEntity.ok(filtered);
     }
 
     @GetMapping("/blood-requests/{id}")
@@ -116,11 +104,17 @@ public class DonorController {
 
     @GetMapping("/responses/{id}/qr/download")
     public ResponseEntity<byte[]> downloadQrCode(@AuthenticationPrincipal User user, @PathVariable Long id) {
+        Donor donor = donorRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Donor profile not found"));
         RequestResponse response = requestResponseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Response not found"));
 
+        if (!donor.getId().equals(response.getDonorId())) {
+            throw new ResourceNotFoundException("Response not found");
+        }
+
         if (response.getVerificationQrCode() == null) {
-            throw new RuntimeException("No QR code available for this response");
+            throw new ResourceNotFoundException("No QR code available for this response");
         }
 
         byte[] qrImage = qrCodeService.generateQrImage(response.getVerificationQrCode());

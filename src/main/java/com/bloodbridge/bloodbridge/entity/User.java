@@ -1,6 +1,7 @@
 package com.bloodbridge.bloodbridge.entity;
 
 import com.bloodbridge.bloodbridge.enumtype.UserRole;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -33,6 +34,7 @@ public class User implements UserDetails {
     private String email;
 
     @Column(nullable = false, length = 255)
+    @JsonIgnore
     private String password;
 
     @Column(name = "phone", length = 20)
@@ -53,12 +55,15 @@ public class User implements UserDetails {
     private LocalDateTime phoneVerifiedAt;
 
     @Column(name = "remember_token", length = 100)
+    @JsonIgnore
     private String rememberToken;
 
     @Column(name = "verification_token", length = 255)
+    @JsonIgnore
     private String verificationToken;
 
     @Column(name = "verification_token_expires_at")
+    @JsonIgnore
     private LocalDateTime verificationTokenExpiresAt;
 
     @Builder.Default
@@ -77,9 +82,11 @@ public class User implements UserDetails {
     private LocalDateTime deletedAt;
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private Donor donor;
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private Organization organization;
 
     @Override

@@ -220,11 +220,11 @@ CREATE TABLE IF NOT EXISTS announcements (
     deleted_at TIMESTAMP NULL
 );
 
-INSERT INTO governorates (name_en, name_ar) VALUES ('Gaza', 'غزة');
-INSERT INTO governorates (name_en, name_ar) VALUES ('North Gaza', 'شمال غزة');
-INSERT INTO governorates (name_en, name_ar) VALUES ('Deir al-Balah', 'دير البلح');
-INSERT INTO governorates (name_en, name_ar) VALUES ('Khan Yunis', 'خان يونس');
-INSERT INTO governorates (name_en, name_ar) VALUES ('Rafah', 'رفح');
+INSERT INTO governorates (name_en, name_ar) VALUES ('Cairo', 'القاهرة');
+INSERT INTO governorates (name_en, name_ar) VALUES ('Giza', 'الجيزة');
+INSERT INTO governorates (name_en, name_ar) VALUES ('Alexandria', 'الإسكندرية');
+INSERT INTO governorates (name_en, name_ar) VALUES ('Dakahlia', 'الدقهلية');
+INSERT INTO governorates (name_en, name_ar) VALUES ('Qalyubia', 'القليوبية');
 
 INSERT INTO achievements (name, description, points_rewards, badge_icon, badge_type, criteria_type, criteria_value, display_order) VALUES
 ('{"en": "First Donation", "ar": "أول تبرع"}', '{"en": "Complete your first donation", "ar": "أكمل تبرعك الأول"}', 10, 'badge-first', 'milestone', 'donations_count', 1, 1),

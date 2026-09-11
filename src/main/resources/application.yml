@@ -50,6 +50,10 @@ spring:
       key-prefix: "bb:"
 
   data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 200
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
@@ -97,7 +101,7 @@ management:
         include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: always
+      show-details: never
   metrics:
     tags:
       application: bloodbridge
@@ -166,6 +170,13 @@ resilience4j:
         timeout-duration: 10s
 
 bloodbridge:
+  dev:
+    # DEV ONLY. Enables /v1/public/verify-dev. Never enable outside local dev.
+    verify-probe-enabled: false
+  org:
+    # When true (demo default) new organizations skip the admin approval
+    # queue. Set ORG_AUTO_APPROVE=false to enforce real approvals.
+    auto-approve: ${ORG_AUTO_APPROVE:true}
   redis:
     enabled: true
     jwt-blacklist-ttl-hours: 24
@@ -217,12 +228,12 @@ bloodbridge:
     email-verification-per-minute: 6
 
   map:
-    default-lat: 31.5
-    default-lng: 34.4667
-    lat-min: 31.2
-    lat-max: 32.6
-    lng-min: 34.2
-    lng-max: 35.6
+    default-lat: 30.0444
+    default-lng: 31.2357
+    lat-min: 22.0
+    lat-max: 31.5
+    lng-min: 25.0
+    lng-max: 35.0
 
   cors:
-    allowed-origins: "*"
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}

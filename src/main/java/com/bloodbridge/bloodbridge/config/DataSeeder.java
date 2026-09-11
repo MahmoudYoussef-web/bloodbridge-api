@@ -1,9 +1,11 @@
 package com.bloodbridge.bloodbridge.config;
 
 import com.bloodbridge.bloodbridge.entity.Achievement;
+import com.bloodbridge.bloodbridge.entity.Announcement;
 import com.bloodbridge.bloodbridge.entity.Governorate;
 import com.bloodbridge.bloodbridge.entity.Setting;
 import com.bloodbridge.bloodbridge.repository.AchievementRepository;
+import com.bloodbridge.bloodbridge.repository.AnnouncementRepository;
 import com.bloodbridge.bloodbridge.repository.GovernorateRepository;
 import com.bloodbridge.bloodbridge.repository.SettingRepository;
 import jakarta.annotation.PostConstruct;
@@ -23,6 +25,7 @@ public class DataSeeder {
     private final GovernorateRepository governorateRepository;
     private final AchievementRepository achievementRepository;
     private final SettingRepository settingRepository;
+    private final AnnouncementRepository announcementRepository;
 
     @PostConstruct
     public void seed() {
@@ -36,16 +39,17 @@ public class DataSeeder {
         seedGovernorates();
         seedAchievements();
         seedSettings();
+        seedAnnouncements();
 
         log.info("Data seeding complete");
     }
 
     private void seedGovernorates() {
-        governorateRepository.save(createGovernorate("North Gaza", "شمال غزة", 31.55, 34.5));
-        governorateRepository.save(createGovernorate("Gaza", "غزة", 31.5, 34.4667));
-        governorateRepository.save(createGovernorate("Deir al-Balah", "دير البلح", 31.4167, 34.35));
-        governorateRepository.save(createGovernorate("Khan Yunis", "خان يونس", 31.3333, 34.3));
-        governorateRepository.save(createGovernorate("Rafah", "رفح", 31.2833, 34.25));
+        governorateRepository.save(createGovernorate("Cairo", "القاهرة", 30.0444, 31.2357));
+        governorateRepository.save(createGovernorate("Giza", "الجيزة", 30.0131, 31.2089));
+        governorateRepository.save(createGovernorate("Alexandria", "الإسكندرية", 31.2001, 29.9187));
+        governorateRepository.save(createGovernorate("Dakahlia", "الدقهلية", 31.0379, 31.3815));
+        governorateRepository.save(createGovernorate("Qalyubia", "القليوبية", 30.4650, 31.1848));
         log.info("Seeded 5 governorates");
     }
 
@@ -106,7 +110,7 @@ public class DataSeeder {
         seedSetting("scoring", "circuit_breaker_recovery_seconds", "{\"value\": 120}");
         seedSetting("general", "site_name", "{\"value\": {\"ar\": \"بلود بريدج\", \"en\": \"BloodBridge\"}}");
         seedSetting("general", "support_email", "{\"value\": \"info@bloodbridge.com\"}");
-        seedSetting("general", "support_phone", "{\"value\": \"+970-59-123-4567\"}");
+        seedSetting("general", "support_phone", "{\"value\": \"+20-100-123-4567\"}");
         seedSetting("general", "min_donor_age", "{\"value\": 18}");
         seedSetting("general", "max_donor_age", "{\"value\": 65}");
         seedSetting("general", "min_donor_weight", "{\"value\": 50}");
@@ -114,8 +118,8 @@ public class DataSeeder {
         seedSetting("general", "min_donor_height", "{\"value\": 140}");
         seedSetting("general", "min_days_after_surgery", "{\"value\": 28}");
         seedSetting("general", "org_max_requests_per_day", "{\"value\": 5}");
-        seedSetting("general", "map_default_lat", "{\"value\": 31.5}");
-        seedSetting("general", "map_default_lng", "{\"value\": 34.4667}");
+        seedSetting("general", "map_default_lat", "{\"value\": 30.0444}");
+        seedSetting("general", "map_default_lng", "{\"value\": 31.2357}");
         log.info("Seeded 19 settings");
     }
 
@@ -127,5 +131,30 @@ public class DataSeeder {
         s.setCreatedAt(LocalDateTime.now());
         s.setUpdatedAt(LocalDateTime.now());
         settingRepository.save(s);
+    }
+
+    private void seedAnnouncements() {
+        Announcement regular = Announcement.builder()
+                .titleEn("Give blood every 90 days")
+                .titleAr("تبرع بالدم كل 90 يومًا")
+                .contentEn("Most donors become eligible again 90 days after their last donation. Keep your profile updated and we will page you when your type is needed.")
+                .contentAr("يصبح معظم المتبرعين مؤهلين مجددًا بعد 90 يومًا من آخر تبرع. حدّث بياناتك وسنناديك عند الحاجة إلى فصيلتك.")
+                .isPublished(true)
+                .publishedAt(LocalDateTime.now())
+                .build();
+        announcementRepository.save(regular);
+
+        Announcement donorDay = Announcement.builder()
+                .titleEn("World Blood Donor Day — June 14")
+                .titleAr("اليوم العالمي للمتبرعين بالدم — 14 يونيو")
+                .contentEn("A global thank-you to voluntary donors. One donation can save up to three lives — bring a friend to your next appointment.")
+                .contentAr("تحية عالمية للمتبرعين. تبرع واحد قد ينقذ حتى ثلاثة أرواح — اصطحب صديقًا إلى موعدك القادم.")
+                .isPublished(true)
+                .publishedAt(LocalDateTime.now())
+                .eventDate(LocalDateTime.now().plusMonths(9).withDayOfMonth(14)
+                        .withHour(10).withMinute(0).withSecond(0).withNano(0))
+                .build();
+        announcementRepository.save(donorDay);
+        log.info("Seeded 2 announcements");
     }
 }

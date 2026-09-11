@@ -1,6 +1,7 @@
 package com.bloodbridge.bloodbridge.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -25,15 +26,19 @@ public class Announcement {
     private Long id;
 
     @Column(name = "title_ar", nullable = false, length = 255)
+    @NotBlank(message = "Arabic title is required")
     private String titleAr;
 
     @Column(name = "title_en", nullable = false, length = 255)
+    @NotBlank(message = "English title is required")
     private String titleEn;
 
     @Column(name = "content_ar", columnDefinition = "TEXT", nullable = false)
+    @NotBlank(message = "Arabic content is required")
     private String contentAr;
 
     @Column(name = "content_en", columnDefinition = "TEXT", nullable = false)
+    @NotBlank(message = "English content is required")
     private String contentEn;
 
     @Column(name = "image_path", length = 500)
@@ -45,6 +50,9 @@ public class Announcement {
 
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
+
+    @Column(name = "event_date")
+    private LocalDateTime eventDate;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

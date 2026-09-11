@@ -5,6 +5,7 @@ import com.bloodbridge.bloodbridge.dto.BloodRequestListView;
 import com.bloodbridge.bloodbridge.dto.OrganizationProfileResponse;
 import com.bloodbridge.bloodbridge.dto.OrganizationProfileUpdateRequest;
 import com.bloodbridge.bloodbridge.dto.RequestResponseView;
+import com.bloodbridge.bloodbridge.dto.ScanQrRequest;
 import com.bloodbridge.bloodbridge.entity.BloodRequest;
 import com.bloodbridge.bloodbridge.entity.Organization;
 import com.bloodbridge.bloodbridge.entity.RequestResponse;
@@ -25,9 +26,7 @@ import com.bloodbridge.bloodbridge.service.RequestResponseViewAssembler;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -40,6 +39,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/v1/org")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ORGANIZATION')")
 public class OrganizationController {
 
     private final OrganizationRepository organizationRepository;
@@ -99,20 +99,14 @@ public class OrganizationController {
     }
 
     @GetMapping("/blood-requests")
-    public ResponseEntity<?> getMyRequests(
+    public ResponseEntity<List<BloodRequestListView>> getMyRequests(
             @AuthenticationPrincipal User user,
-            @RequestParam(required = false) BloodRequestStatus status,
-            @PageableDefault(size = 20) Pageable pageable,
-            @RequestParam(required = false) Boolean paged) {
+            @RequestParam(required = false) BloodRequestStatus status) {
         Organization org = organizationRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
-        if (Boolean.TRUE.equals(paged) || status != null || pageable.getPageNumber() > 0) {
-            Page<BloodRequest> page = bloodRequestRepository.findOrgRequestsFiltered(org.getId(), status, pageable);
-            List<BloodRequestListView> views = bloodRequestListViewAssembler.assemble(page.getContent());
-            return ResponseEntity.ok(new org.springframework.data.domain.PageImpl<>(views, pageable, page.getTotalElements()));
-        }
-        List<BloodRequest> requests =
-                bloodRequestRepository.findByOrganizationIdOrderByCreatedAtDesc(org.getId());
+        List<BloodRequest> requests = bloodRequestRepository
+                .findOrgRequestsFiltered(org.getId(), status, Pageable.unpaged())
+                .getContent();
         return ResponseEntity.ok(bloodRequestListViewAssembler.assemble(requests));
     }
 
@@ -153,7 +147,7 @@ public class OrganizationController {
     }
 
     @GetMapping("/blood-requests/{id}/responses")
-    public ResponseEntity<List<RequestResponse>> getRequestResponses(
+    public ResponseEntity<List<RequestResponseView>> getRequestResponses(
             @AuthenticationPrincipal User user, @PathVariable Long id) {
         BloodRequest request = bloodRequestRepository.findByIdNotDeleted(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Blood request not found"));
@@ -165,7 +159,7 @@ public class OrganizationController {
         }
 
         List<RequestResponse> responses = requestResponseRepository.findByBloodRequestId(id);
-        return ResponseEntity.ok(responses);
+        return ResponseEntity.ok(responseViewAssembler.assemble(responses));
     }
 
     @GetMapping("/responses")
@@ -179,7 +173,7 @@ public class OrganizationController {
     @PostMapping("/scan-qr")
     public ResponseEntity<?> scanQr(
             @AuthenticationPrincipal User user,
-            @RequestParam String code) {
+            @Valid @RequestBody ScanQrRequest body) {
         Organization org = organizationRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found"));
 
@@ -190,7 +184,7 @@ public class OrganizationController {
                             "retryAfter", "60s"));
         }
 
-        RequestResponse response = actionService.confirmAdmission(code, org);
+        RequestResponse response = actionService.confirmAdmission(body.code(), org);
         return ResponseEntity.ok(responseViewAssembler.assemble(List.of(response)).get(0));
     }
 

@@ -12,22 +12,26 @@ import com.bloodbridge.bloodbridge.dto.ResendVerificationResponse;
 import com.bloodbridge.bloodbridge.dto.ResetPasswordRequest;
 import com.bloodbridge.bloodbridge.dto.VerifyEmailRequest;
 import com.bloodbridge.bloodbridge.entity.Donor;
+import com.bloodbridge.bloodbridge.entity.DonorHealthProfile;
 import com.bloodbridge.bloodbridge.entity.Organization;
 import com.bloodbridge.bloodbridge.entity.PasswordResetToken;
 import com.bloodbridge.bloodbridge.entity.User;
 import com.bloodbridge.bloodbridge.enumtype.OrganizationStatus;
 import com.bloodbridge.bloodbridge.enumtype.UserRole;
 import com.bloodbridge.bloodbridge.exception.BusinessException;
+import com.bloodbridge.bloodbridge.jwt.InMemoryTokenBlacklist;
 import com.bloodbridge.bloodbridge.jwt.JwtService;
 import com.bloodbridge.bloodbridge.shared.domain.RedisRateLimiter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import com.bloodbridge.bloodbridge.repository.DonorRepository;
+import com.bloodbridge.bloodbridge.repository.DonorHealthProfileRepository;
 import com.bloodbridge.bloodbridge.repository.OrganizationRepository;
 import com.bloodbridge.bloodbridge.repository.PasswordResetTokenRepository;
 import com.bloodbridge.bloodbridge.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -54,13 +58,37 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final DonorRepository donorRepository;
+    private final DonorHealthProfileRepository healthProfileRepository;
     private final OrganizationRepository organizationRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final Environment environment;
     private final ObjectProvider<RedisRateLimiter> redisRateLimiterProvider;
+    private final InMemoryTokenBlacklist inMemoryTokenBlacklist;
+
+    @Value("${bloodbridge.org.auto-approve:true}")
+    private boolean orgAutoApprove;
 
     private RedisRateLimiter redisRateLimiterOrNull() {
         return redisRateLimiterProvider.getIfAvailable();
+    }
+
+    private boolean isRevoked(String token) {
+        RedisRateLimiter limiter = redisRateLimiterOrNull();
+        if (limiter != null && limiter.isTokenBlacklisted(token)) {
+            return true;
+        }
+        return inMemoryTokenBlacklist.isBlacklisted(InMemoryTokenBlacklist.hash(token));
+    }
+
+    private void revoke(String token, long ttlSeconds) {
+        if (ttlSeconds <= 0) {
+            ttlSeconds = 86400;
+        }
+        RedisRateLimiter limiter = redisRateLimiterOrNull();
+        if (limiter != null) {
+            limiter.blacklistToken(token, ttlSeconds);
+        }
+        inMemoryTokenBlacklist.blacklist(InMemoryTokenBlacklist.hash(token), ttlSeconds);
     }
 
     @Transactional
@@ -99,15 +127,21 @@ public class AuthService {
         user = userRepository.save(user);
 
         if (role == UserRole.DONOR) {
-            donorRepository.save(Donor.builder()
+            Donor donor = donorRepository.save(Donor.builder()
                     .userId(user.getId())
                     .build());
+            // Every donor starts with a health profile row so accept/eligibility
+            // flows never hit "Donor health profile not found" for fresh accounts.
+            DonorHealthProfile healthProfile = new DonorHealthProfile();
+            healthProfile.setDonor(donor);
+            healthProfile.setIsEligible(true);
+            healthProfileRepository.save(healthProfile);
         } else if (role == UserRole.ORGANIZATION) {
             organizationRepository.save(Organization.builder()
                     .userId(user.getId())
                     .orgName(request.getName())
-                    .slug(request.getName().toLowerCase().replaceAll("\\s+", "-"))
-                    .approvalStatus(OrganizationStatus.APPROVED)
+                    .slug(uniqueOrgSlug(request.getName()))
+                    .approvalStatus(orgAutoApprove ? OrganizationStatus.APPROVED : OrganizationStatus.PENDING)
                     .build());
         }
 
@@ -125,6 +159,7 @@ public class AuthService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public AuthResponse authenticate(AuthRequest request) {
         try {
             authenticationManager.authenticate(
@@ -151,32 +186,32 @@ public class AuthService {
     }
 
     public AuthResponse refreshToken(String refreshToken) {
-        RedisRateLimiter limiter = redisRateLimiterOrNull();
-        if (limiter == null) {
-            log.warn("Redis is disabled: refresh-token rotation runs without revocation tracking (reuse cannot be detected)");
-        }
-        if (limiter != null && limiter.isTokenBlacklisted(refreshToken)) {
-            throw new BusinessException("Refresh token has been revoked", HttpStatus.UNAUTHORIZED);
-        }
-        if (!jwtService.isTokenValid(refreshToken)) {
+        if (!jwtService.isRefreshToken(refreshToken)) {
             throw new BusinessException("Invalid or expired refresh token", HttpStatus.UNAUTHORIZED);
+        }
+        if (isRevoked(refreshToken)) {
+            throw new BusinessException("Refresh token has been revoked", HttpStatus.UNAUTHORIZED);
         }
 
         String email = jwtService.extractUsername(refreshToken);
         Long userId = jwtService.extractUserId(refreshToken);
-        String role = jwtService.extractRole(refreshToken);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException("User not found"));
+        if (!Boolean.TRUE.equals(user.getIsActive()) || user.getDeletedAt() != null) {
+            throw new BusinessException("Account is disabled", HttpStatus.UNAUTHORIZED);
+        }
+        if (email == null || !email.equals(user.getEmail())) {
+            throw new BusinessException("Invalid or expired refresh token", HttpStatus.UNAUTHORIZED);
+        }
 
-        String newToken = jwtService.generateToken(userId, email, role);
-        String newRefreshToken = jwtService.generateRefreshToken(userId, email, role);
+        // Role is always read from the database so role changes take effect immediately.
+        String role = user.getRole().name();
+        String newToken = jwtService.generateToken(userId, user.getEmail(), role);
+        String newRefreshToken = jwtService.generateRefreshToken(userId, user.getEmail(), role);
 
         // Rotation: revoke the used refresh token to detect reuse.
-        if (limiter != null) {
-            long ttl = jwtService.getRemainingSeconds(refreshToken);
-            if (ttl > 0) limiter.blacklistToken(refreshToken, ttl);
-        }
+        revoke(refreshToken, jwtService.getRemainingSeconds(refreshToken));
 
         return AuthResponse.builder()
                 .token(newToken)
@@ -282,30 +317,30 @@ public class AuthService {
     }
 
     /**
-     * Regenerates a verification token for the given email. Under the dev "h2"
-     * profile the token is returned so local verification can complete without
-     * a mail server (mirrors DevVerifyProbe).
+     * Regenerates a verification token for the given email. Always returns a
+     * success-shaped response so callers cannot probe which addresses exist.
+     * Under the dev "h2" profile the token is returned so local verification
+     * can complete without a mail server (mirrors DevVerifyProbe).
      */
     @Transactional
     public ResendVerificationResponse resendVerification(ResendVerificationRequest request) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(request.getEmail())
-                .orElseThrow(() -> new BusinessException("User not found: " + request.getEmail()));
+        User user = userRepository.findByEmailAndDeletedAtIsNull(request.getEmail()).orElse(null);
 
-        String token = generateToken();
-        user.setVerificationToken(token);
-        user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(VERIFICATION_TOKEN_TTL_HOURS));
-        userRepository.save(user);
-
-        String devVerificationToken = environment.acceptsProfiles(Profiles.of("h2")) ? token : null;
-        return new ResendVerificationResponse("Verification email sent", devVerificationToken);
+        String devVerificationToken = null;
+        if (user != null) {
+            String token = generateToken();
+            user.setVerificationToken(token);
+            user.setVerificationTokenExpiresAt(LocalDateTime.now().plusHours(VERIFICATION_TOKEN_TTL_HOURS));
+            userRepository.save(user);
+            devVerificationToken = environment.acceptsProfiles(Profiles.of("h2")) ? token : null;
+        }
+        return new ResendVerificationResponse(
+                "If that email is registered, a verification email has been sent.", devVerificationToken);
     }
 
     public MessageResponse logout(String token) {
-        RedisRateLimiter limiter = redisRateLimiterOrNull();
-        if (limiter != null && token != null && !token.isBlank()) {
-            long ttl = jwtService.getRemainingSeconds(token);
-            if (ttl <= 0) ttl = 86400;
-            limiter.blacklistToken(token, ttl);
+        if (token != null && !token.isBlank()) {
+            revoke(token, jwtService.getRemainingSeconds(token));
         }
         return new MessageResponse("Logged out successfully");
     }
@@ -314,5 +349,18 @@ public class AuthService {
         byte[] bytes = new byte[32];
         new SecureRandom().nextBytes(bytes);
         return HexFormat.of().formatHex(bytes);
+    }
+
+    private String uniqueOrgSlug(String name) {
+        String base = name.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
+        if (base.isBlank()) {
+            base = "org";
+        }
+        String slug = base;
+        int attempt = 1;
+        while (organizationRepository.existsBySlug(slug)) {
+            slug = base + "-" + attempt++;
+        }
+        return slug;
     }
 }

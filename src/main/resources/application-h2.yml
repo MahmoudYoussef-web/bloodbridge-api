@@ -1,3 +1,8 @@
+management:
+  endpoint:
+    health:
+      show-details: always
+
 spring:
   cache:
     type: simple
@@ -25,6 +30,8 @@ spring:
     enabled: false
 
 bloodbridge:
+  dev:
+    verify-probe-enabled: true
   redis:
     enabled: false
   fastapi:

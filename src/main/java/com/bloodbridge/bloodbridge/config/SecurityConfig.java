@@ -57,7 +57,7 @@ public class SecurityConfig {
                 .requestMatchers("/v1/auth/**").permitAll()
                 .requestMatchers("/v1/public/**").permitAll()
                 .requestMatchers("/health").permitAll()
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
                 .requestMatchers("/v1/admin/**").hasRole("ADMIN")
@@ -70,7 +70,7 @@ public class SecurityConfig {
             .authenticationProvider(authenticationProvider());
 
         if (jwtBlacklistFilter != null) {
-            http.addFilterBefore(jwtBlacklistFilter, JwtAuthenticationFilter.class);
+            http.addFilterBefore(jwtBlacklistFilter, UsernamePasswordAuthenticationFilter.class);
         }
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

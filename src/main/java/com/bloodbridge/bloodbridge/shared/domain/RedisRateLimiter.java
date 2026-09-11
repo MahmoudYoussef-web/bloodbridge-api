@@ -46,12 +46,12 @@ public class RedisRateLimiter {
     }
 
     public void blacklistToken(String token, long ttlSeconds) {
-        String redisKey = "blacklist:jwt:" + token;
+        String redisKey = "blacklist:jwt:" + com.bloodbridge.bloodbridge.jwt.InMemoryTokenBlacklist.hash(token);
         redisTemplate.opsForValue().set(redisKey, "true", ttlSeconds, TimeUnit.SECONDS);
     }
 
     public boolean isTokenBlacklisted(String token) {
-        String redisKey = "blacklist:jwt:" + token;
+        String redisKey = "blacklist:jwt:" + com.bloodbridge.bloodbridge.jwt.InMemoryTokenBlacklist.hash(token);
         return Boolean.TRUE.equals(redisTemplate.hasKey(redisKey));
     }
 }

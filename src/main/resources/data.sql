@@ -1,10 +1,10 @@
 -- Seed governorates
 INSERT INTO governorates (name_en, name_ar) VALUES
-('North Gaza', 'شمال غزة'),
-('Gaza', 'غزة'),
-('Deir al-Balah', 'دير البلح'),
-('Khan Yunis', 'خان يونس'),
-('Rafah', 'رفح');
+('Cairo', 'القاهرة'),
+('Giza', 'الجيزة'),
+('Alexandria', 'الإسكندرية'),
+('Dakahlia', 'الدقهلية'),
+('Qalyubia', 'القليوبية');
 
 -- Seed basic achievements
 INSERT INTO achievements (name, description, points_rewards, badge_icon, badge_type, criteria_type, criteria_value, display_order) VALUES
@@ -29,7 +29,7 @@ INSERT INTO settings (group_name, name, payload, created_at, updated_at) VALUES
 INSERT INTO settings (group_name, name, payload, created_at, updated_at) VALUES
 ('general', 'site_name', '{"value": {"ar": "بلود بريدج", "en": "BloodBridge"}}', NOW(), NOW()),
 ('general', 'support_email', '{"value": "info@bloodbridge.com"}', NOW(), NOW()),
-('general', 'support_phone', '{"value": "+970-59-123-4567"}', NOW(), NOW()),
+('general', 'support_phone', '{"value": "+20-100-123-4567"}', NOW(), NOW()),
 ('general', 'min_donor_age', '{"value": 18}', NOW(), NOW()),
 ('general', 'max_donor_age', '{"value": 65}', NOW(), NOW()),
 ('general', 'min_donor_weight', '{"value": 50}', NOW(), NOW()),
@@ -37,5 +37,5 @@ INSERT INTO settings (group_name, name, payload, created_at, updated_at) VALUES
 ('general', 'min_donor_height', '{"value": 140}', NOW(), NOW()),
 ('general', 'min_days_after_surgery', '{"value": 28}', NOW(), NOW()),
 ('general', 'org_max_requests_per_day', '{"value": 5}', NOW(), NOW()),
-('general', 'map_default_lat', '{"value": 31.5}', NOW(), NOW()),
-('general', 'map_default_lng', '{"value": 34.4667}', NOW(), NOW());
+('general', 'map_default_lat', '{"value": 30.0444}', NOW(), NOW()),
+('general', 'map_default_lng', '{"value": 31.2357}', NOW(), NOW());

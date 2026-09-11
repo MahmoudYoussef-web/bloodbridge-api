@@ -46,9 +46,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+            final UserDetails userDetails;
+            try {
+                userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+            } catch (Exception e) {
+                // Unknown, deleted or disabled account: stay unauthenticated
+                // instead of leaking account existence via error responses.
+                filterChain.doFilter(request, response);
+                return;
+            }
 
-            if (jwtService.isTokenValid(jwt)) {
+            if (jwtService.isTokenValid(jwt) && userDetails.isEnabled() && userDetails.isAccountNonLocked()) {
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         userDetails,
                         null,

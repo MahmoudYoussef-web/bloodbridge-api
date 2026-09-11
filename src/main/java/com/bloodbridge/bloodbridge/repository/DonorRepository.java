@@ -3,6 +3,9 @@ package com.bloodbridge.bloodbridge.repository;
 import com.bloodbridge.bloodbridge.entity.Donor;
 import com.bloodbridge.bloodbridge.enumtype.BloodType;
 import com.bloodbridge.bloodbridge.enumtype.RequestResponseStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +21,15 @@ public interface DonorRepository extends JpaRepository<Donor, Long> {
     Optional<Donor> findByUserId(Long userId);
 
     Optional<Donor> findByNationalId(String nationalId);
+
+    /**
+     * Admin listing: to-one associations needed by the view are fetched
+     * eagerly so Jackson never touches an uninitialized lazy proxy
+     * (open-in-view is disabled).
+     */
+    @EntityGraph(attributePaths = {"user", "healthProfile"})
+    @Query("SELECT d FROM Donor d")
+    Page<Donor> findAllForAdmin(Pageable pageable);
 
     List<Donor> findByGovernorateId(Long governorateId);
 

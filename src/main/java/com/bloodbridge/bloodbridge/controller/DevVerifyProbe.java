@@ -3,9 +3,9 @@ package com.bloodbridge.bloodbridge.controller;
 import com.bloodbridge.bloodbridge.entity.User;
 import com.bloodbridge.bloodbridge.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,16 +26,19 @@ import java.util.Map;
 @RestController
 @RequestMapping("/v1/public")
 @Profile("h2")
+@ConditionalOnProperty(value = "bloodbridge.dev.verify-probe-enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class DevVerifyProbe {
 
     private final UserRepository userRepository;
-    private final Environment environment;
+
+    @Value("${bloodbridge.dev.verify-probe-enabled:false}")
+    private boolean probeEnabled;
 
     @PostMapping("/verify-dev")
     public ResponseEntity<Map<String, String>> verify(@RequestBody Map<String, String> body) {
-        if (!environment.acceptsProfiles(Profiles.of("h2"))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Dev endpoint not available");
+        if (!probeEnabled) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found");
         }
         String email = body.get("email");
         User user = userRepository.findByEmailAndDeletedAtIsNull(email)
