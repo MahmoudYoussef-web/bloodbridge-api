@@ -22,6 +22,14 @@ A production-oriented REST API that matches blood donation requests to eligible 
 [![Security](https://img.shields.io/badge/Security-JWT_%2B_Ownership_Checks-orange?style=flat-square)](#-security)
 [![Scoring](https://img.shields.io/badge/Donor_Scoring-FastAPI_%2B_Rule--Based_Fallback-purple?style=flat-square)](#-donor-scoring)
 
+<br/>
+
+### 🎬 Demo video — full feature tour (donor + organization + admin, ~7 min)
+
+[![BloodBridge full tour](https://img.youtube.com/vi/FBtXyC0d9Hs/0.jpg)](https://youtu.be/FBtXyC0d9Hs)
+
+**Watch it here: https://youtu.be/FBtXyC0d9Hs**
+
 </div>
 
 ---
@@ -469,6 +477,20 @@ The companion React frontend (Vite + Tailwind) consumes the public, auth, and no
 <p align="center">
   <img src="docs/screenshots/ui-login.png" width="800" alt="BloodBridge login page with forgot-password link"/>
 </p>
+
+### Fresh UI (current frontend)
+
+| Landing hero | Live urgent requests |
+|---|---|
+| ![Landing hero](docs/screenshots/01-landing-hero.png) | ![Urgent requests](docs/screenshots/02-urgent-requests.png) |
+
+| Donor dashboard | Donation history with QR |
+|---|---|
+| ![Donor dashboard](docs/screenshots/03-donor-dashboard.png) | ![Donor history](docs/screenshots/04-donor-history-qr.png) |
+
+| Organization dashboard | Admin control room |
+|---|---|
+| ![Org dashboard](docs/screenshots/05-org-dashboard.png) | ![Admin dashboard](docs/screenshots/06-admin-dashboard.png) |
 
 ---
 
