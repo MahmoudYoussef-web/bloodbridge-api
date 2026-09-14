@@ -1,6 +1,8 @@
 package com.bloodbridge.bloodbridge.shared.outbox;
 
 import com.bloodbridge.bloodbridge.bloodrequest.domain.BloodRequestBroadcastedEvent;
+import com.bloodbridge.bloodbridge.bloodrequest.domain.DonationCompletedEvent;
+import com.bloodbridge.bloodbridge.bloodrequest.domain.DonorAcceptedRequestEvent;
 import com.bloodbridge.bloodbridge.shared.domain.DomainEvent;
 import com.bloodbridge.bloodbridge.shared.events.DomainEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +38,8 @@ class OutboxServiceTest {
         objectMapper.registerModule(new JavaTimeModule());
         eventTypeRegistry = new HashMap<>();
         eventTypeRegistry.put("blood_request.broadcasted", BloodRequestBroadcastedEvent.class);
+        eventTypeRegistry.put("donation.completed", DonationCompletedEvent.class);
+        eventTypeRegistry.put("donor.accepted_request", DonorAcceptedRequestEvent.class);
         outboxService = new OutboxService(outboxRepository, objectMapper, domainEventPublisher, eventTypeRegistry);
     }
 
@@ -103,5 +107,51 @@ class OutboxServiceTest {
 
         verify(domainEventPublisher).publish(any(BloodRequestBroadcastedEvent.class));
         verify(outboxRepository).markAsProcessed(eq("event-1"), eq(OutboxStatus.COMPLETED), any(LocalDateTime.class));
+    }
+
+    @Test
+    void shouldRoundTripRealisticDonationCompletedPayload() throws Exception {
+        // Regression test: the relay must deserialize the exact payload shape
+        // produced by saveEvent (parent DomainEvent props included) instead of
+        // looping forever with "no String-argument constructor" errors.
+        DonationCompletedEvent event = new DonationCompletedEvent(1L, 2L, 3L, 4L);
+        String payload = objectMapper.writeValueAsString(event);
+
+        OutboxEvent pendingEvent = OutboxEvent.builder()
+                .id(event.getEventId())
+                .eventType("donation.completed")
+                .payload(payload)
+                .status(OutboxStatus.PENDING)
+                .createdAt(LocalDateTime.now().minusMinutes(5))
+                .build();
+
+        when(outboxRepository.findPendingEvents(any(OutboxStatus.class), any(LocalDateTime.class)))
+                .thenReturn(List.of(pendingEvent));
+
+        outboxService.processPendingEvents();
+
+        verify(domainEventPublisher).publish(any(DonationCompletedEvent.class));
+        verify(outboxRepository).markAsProcessed(eq(event.getEventId()), eq(OutboxStatus.COMPLETED), any(LocalDateTime.class));
+        verify(outboxRepository, never()).markAsFailed(any(), any());
+    }
+
+    @Test
+    void shouldMarkPoisonPayloadAsFailedInsteadOfLoopingForever() {
+        OutboxEvent poisonEvent = OutboxEvent.builder()
+                .id("poison-1")
+                .eventType("donation.completed")
+                .payload("not-json-at-all")
+                .status(OutboxStatus.PENDING)
+                .createdAt(LocalDateTime.now().minusMinutes(5))
+                .build();
+
+        when(outboxRepository.findPendingEvents(any(OutboxStatus.class), any(LocalDateTime.class)))
+                .thenReturn(List.of(poisonEvent));
+
+        outboxService.processPendingEvents();
+
+        verify(domainEventPublisher, never()).publish(any());
+        verify(outboxRepository).markAsFailed(eq("poison-1"), any());
+        verify(outboxRepository, never()).markAsProcessed(any(), any(), any());
     }
 }

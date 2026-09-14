@@ -2,9 +2,11 @@ package com.bloodbridge.bloodbridge.bloodrequest.domain;
 
 import com.bloodbridge.bloodbridge.shared.domain.DomainEvent;
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Getter
 public class DonorAcceptedRequestEvent extends DomainEvent {
     private final Long responseId;

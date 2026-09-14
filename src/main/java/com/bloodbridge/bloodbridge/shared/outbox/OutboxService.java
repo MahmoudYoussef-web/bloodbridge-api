@@ -25,6 +25,13 @@ public class OutboxService {
     @Transactional
     public void saveEvent(DomainEvent event, String aggregateType, Long aggregateId) {
         try {
+            // The relay re-publishes events back through the Spring context, which
+            // re-triggers the AFTER_COMMIT listeners. Guard by event id so a relayed
+            // event never creates a duplicate outbox row (and an endless chain).
+            if (outboxRepository.existsById(event.getEventId())) {
+                log.debug("Outbox event {} already stored, skipping duplicate", event.getEventId());
+                return;
+            }
             String payload = objectMapper.writeValueAsString(event);
             OutboxEvent outboxEvent = OutboxEvent.builder()
                     .id(event.getEventId())
@@ -80,13 +87,20 @@ public class OutboxService {
     private DomainEvent deserialize(OutboxEvent outboxEvent) {
         Class<? extends DomainEvent> type = eventTypeRegistry.get(outboxEvent.getEventType());
         if (type == null) {
-            return null;
+            throw new IllegalStateException("No registered type for '" + outboxEvent.getEventType() + "'");
         }
+        String payload = outboxEvent.getPayload();
         try {
-            return objectMapper.readValue(outboxEvent.getPayload(), type);
+            // Tolerate payloads that were stored as a JSON-encoded string
+            // (double-encoded) instead of a raw JSON object.
+            String trimmed = payload != null ? payload.strip() : "";
+            if (trimmed.startsWith("\"")) {
+                payload = objectMapper.readValue(payload, String.class);
+            }
+            return objectMapper.readValue(payload, type);
         } catch (Exception e) {
             log.error("Failed to deserialize outbox event {} as {}: {}", outboxEvent.getId(), type.getSimpleName(), e.getMessage());
-            return null;
+            throw new IllegalStateException("Failed to deserialize outbox event " + outboxEvent.getId(), e);
         }
     }
 }

@@ -39,3 +39,8 @@ INSERT INTO settings (group_name, name, payload, created_at, updated_at) VALUES
 ('general', 'org_max_requests_per_day', '{"value": 5}', NOW(), NOW()),
 ('general', 'map_default_lat', '{"value": 30.0444}', NOW(), NOW()),
 ('general', 'map_default_lng', '{"value": 31.2357}', NOW(), NOW());
+
+-- Dev-only default admin (H2 profile; data.sql is only loaded there).
+-- Email: admin@bloodbridge.local | Password: Admin123!
+INSERT INTO users (name, email, password, role, is_active, email_verified_at, locale, created_at, updated_at) VALUES
+('Site Admin', 'admin@bloodbridge.local', '$2b$12$oIeCx2IE4TrDZ9UFaKsvz.IXaVYZPqE2GPKwvLPQJpm8UW5zwj.3i', '3', TRUE, NOW(), 'en', NOW(), NOW());
